@@ -239,9 +239,9 @@ body {
   color: #1d2129;
 }
 .minicard-body {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 6px 12px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
   font-size: 12px;
 }
 .minicard-item {
@@ -637,7 +637,7 @@ body {
               <span class="lbl">大小</span>
               <span class="val" style="color:#1677ff">{{ db.size_mb }}MB</span>
             </div>
-            <div class="minicard-item" style="grid-column:1/-1">
+            <div class="minicard-item">
               <span class="lbl">更新</span>
               <span class="val" style="color:#1677ff">{{ db.modified }}</span>
             </div>
@@ -685,7 +685,7 @@ body {
               <span class="lbl">已下载</span>
               <span class="val" style="color:#00b42a">{{ user.media_downloaded }}</span>
             </div>
-            <div class="minicard-item" style="grid-column:1/-1">
+            <div class="minicard-item">
               <span class="lbl">更新</span>
               <span class="val" style="color:#1677ff">{{ user.last_update or '无' }}</span>
             </div>
