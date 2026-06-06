@@ -662,7 +662,7 @@ body {
         <div class="minicard">
           <div class="minicard-header">
             <span><img src="{{ user.avatar_url }}" style="width:20px;height:20px;border-radius:50%;margin-right:6px;object-fit:cover" onerror="this.style.display='none'">{{ user.nickname }}</span>
-            <span style="font-size:11px;color:#86909c;font-weight:400">{{ user.last_update or '' }}</span>
+            <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ user.last_update or '' }}</span>
           </div>
           <div class="minicard-body">
             <div class="minicard-item">
@@ -678,7 +678,7 @@ body {
               <span class="val" style="color:#1677ff">{{ user.replies }}</span>
             </div>
             <div class="minicard-item">
-              <span class="lbl">已下载</span>
+              <span class="lbl">媒体</span>
               <span class="val" style="color:#00b42a">{{ user.media_downloaded }}</span>
             </div>
           </div>
