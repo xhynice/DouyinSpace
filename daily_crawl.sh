@@ -6,7 +6,7 @@
 # 部署模式(与 DouyinBarrage 一致):
 #   /app/DouyinComment/config.yaml  ← 从 /app/space/config.yaml 覆盖
 #   /app/DouyinComment/cookie.txt   ← 从 $DOUYIN_COOKIE 注入
-#   /data/DouyinComment/data/      ← 数据持久化(挂载卷)
+#   /data2/DouyinComment/data/      ← 数据持久化(挂载卷)
 #
 # 流程(每天 3 步):
 #   1. 采集数据:每个用户最多 10 个视频 + 其全部评论/回复,只入 DB 不下载媒体
@@ -19,11 +19,8 @@ set -e
 LOG_FILE="/data/logs/daily_crawl_$(date +%Y%m%d).log"
 mkdir -p "$(dirname "$LOG_FILE")"
 
-# 清理 7 天前的日志
-find /data/logs -name "daily_crawl_*.log" -mtime +7 -delete 2>/dev/null || true
-
 APP_DIR="/app/DouyinComment"
-WORK_DIR="/data/DouyinComment"
+WORK_DIR="/data2/DouyinComment"
 
 log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"

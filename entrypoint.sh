@@ -1,6 +1,6 @@
 #!/bin/bash
 echo "=== 抖音弹幕采集 HF Space ==="
-mkdir -p /data/barrage /data/logs /data/DouyinComment/data
+mkdir -p /data/barrage /data/logs
 
 # 1. 拉取最新代码
 echo "[1/6] 拉取弹幕采集最新代码..."

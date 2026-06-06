@@ -2,7 +2,7 @@
 # 数据保存目录（相对 config.yaml 所在目录，支持绝对路径）
 # 用户数据 → {data_dir}/{sec_uid}/ 下的 csv / sqlite.db / avatar.jpg
 # 全局 DB  → {data_dir}/database/sqlite.db
-data_dir: /data/DouyinComment/data
+data_dir: /data2/DouyinComment/data
 
 
 # ==================== 用户配置 ====================
