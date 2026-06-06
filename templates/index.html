@@ -1,0 +1,675 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>DouyinBarrage 控制台</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 640 512%22%3E%3Cpath fill=%22rgb(255, 212, 59)%22 d=%22M352 0c0-17.7-14.3-32-32-32S288-17.7 288 0l0 64-96 0c-53 0-96 43-96 96l0 224c0 53 43 96 96 96l256 0c53 0 96-43 96-96l0-224c0-53-43-96-96-96l-96 0 0-64zM160 368c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zm120 0c0-13.3 10.7-24 24-24l32 0c13.3 0 24 10.7 24 24s-10.7 24-24 24l-32 0c-13.3 0-24-10.7-24-24zM224 176a48 48 0 1 1 0 96 48 48 0 1 1 0-96zm144 48a48 48 0 1 1 96 0 48 48 0 1 1 -96 0zM64 224c0-17.7-14.3-32-32-32S0 206.3 0 224l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96zm544-32c-17.7 0-32 14.3-32 32l0 96c0 17.7 14.3 32 32 32s32-14.3 32-32l0-96c0-17.7-14.3-32-32-32z%22/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: #f5f7fa;
+  color: #1d2129;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Header */
+.header {
+  background: #fff;
+  border-bottom: 1px solid #e5e6eb;
+  padding: 16px 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+}
+.header-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.header-icon {
+  width: 36px;
+  height: 36px;
+  background: #1677ff;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: #fff;
+  flex-shrink: 0;
+}
+.header-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1d2129;
+}
+.header-sub {
+  font-size: 12px;
+  color: #86909c;
+  margin-top: 2px;
+}
+
+/* Container */
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+/* Stats Grid */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.stat-card {
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform 0.2s;
+}
+.stat-card:hover {
+  transform: translateY(-2px);
+}
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  flex-shrink: 0;
+}
+.stat-icon-blue { background: #e8f4ff; color: #1677ff; }
+.stat-icon-green { background: #e8f8e8; color: #00b42a; }
+.stat-icon-orange { background: #fff3e8; color: #ff7d00; }
+.stat-icon-red { background: #ffe8e8; color: #f53f3f; }
+.stat-info { min-width: 0; }
+.stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1d2129;
+  line-height: 1.2;
+}
+.stat-value .unit {
+  font-size: 13px;
+  font-weight: 500;
+  color: #86909c;
+  margin-left: 2px;
+}
+.stat-label {
+  font-size: 12px;
+  color: #86909c;
+  margin-top: 4px;
+}
+
+/* Nav */
+.nav-bar {
+  margin-bottom: 16px;
+}
+.nav-bar a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #1d2129;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.nav-bar a:hover {
+  color: #1677ff;
+  border-color: #1677ff;
+}
+
+/* Dashboard Grid - PC 左右分栏 */
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+  align-items: stretch;
+}
+.dashboard-right {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.dashboard-right .card {
+  flex: 1;
+}
+
+/* Section Card */
+.card {
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  padding: 16px;
+}
+.card-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+  padding-bottom: 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid #e5e6eb;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card-title i {
+  color: #1677ff;
+  font-size: 14px;
+}
+
+/* Recordings List */
+.recordings-list {
+  font-size: 13px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+.recording-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 12px;
+  border-bottom: 1px solid #f0f0f0;
+}
+.recording-row:nth-child(even) {
+  background: #f5f7fa;
+}
+.rec-file {
+  flex: 1 1 60%;
+  font-weight: 500;
+  min-width: 200px;
+  overflow-wrap: break-word;
+}
+.rec-file a {
+  color: #1677ff;
+  text-decoration: none;
+  font-weight: 500;
+}
+.rec-file a:hover {
+  color: #0958d9;
+}
+.rec-meta {
+  flex: 1 1 40%;
+  display: flex;
+  justify-content: space-between;
+  min-width: 160px;
+  color: #86909c;
+}
+
+/* Barrage Mini Cards */
+.minicard-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.minicard {
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  padding: 12px 16px;
+}
+.minicard-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2129;
+}
+.minicard-body {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px 12px;
+  font-size: 12px;
+}
+.minicard-item {
+  display: flex;
+  gap: 4px;
+  padding: 4px 0;
+}
+.minicard-item .lbl {
+  color: #86909c;
+}
+.minicard-item .val {
+  font-weight: 600;
+  color: #1d2129;
+}
+
+/* Button */
+.btn-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid #1677ff;
+  border-radius: 6px;
+  color: #1677ff;
+  background: transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.btn-sm:hover {
+  background: #1677ff;
+  color: #fff;
+}
+
+/* Badge */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+.badge-green { background: #e8f8e8; color: #00b42a; }
+.badge-orange { background: #fff3e8; color: #ff7d00; }
+.badge-gray { background: #f5f7fa; color: #86909c; }
+.badge-red { background: #ffe8e8; color: #f53f3f; }
+
+/* Room Cards */
+.rooms-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+}
+.room-card {
+  background: #fff;
+  border: 1px solid #e5e6eb;
+  border-radius: 8px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: transform 0.2s;
+}
+.room-card:hover {
+  transform: translateY(-1px);
+}
+.room-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.room-card-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.room-card-id {
+  font-size: 12px;
+  color: #86909c;
+}
+.room-card-stats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12px;
+  color: #86909c;
+  flex-wrap: wrap;
+}
+.room-card-stats .stat-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Barrage Viewer */
+.barrage-viewer {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #e5e6eb;
+}
+.viewer-header {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.viewer-title {
+  font-weight: 600;
+  font-size: 13px;
+  color: #1d2129;
+}
+.viewer-count {
+  color: #86909c;
+  font-size: 12px;
+}
+.viewer-close { margin-left: auto; }
+
+/* Log Terminal */
+.log-terminal {
+  background: #1d2129;
+  border-radius: 8px;
+  padding: 16px;
+  min-height: 280px;
+  max-height: 400px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  font-family: 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-all;
+  color: #fff;
+}
+.log-terminal::-webkit-scrollbar { width: 6px; height: 6px; display: none; }
+.log-terminal::-webkit-scrollbar-track { background: #2c2c2c; border-radius: 3px; }
+.log-terminal::-webkit-scrollbar-thumb { background: #4a4a4a; border-radius: 3px; }
+.log-terminal::-webkit-scrollbar-thumb:hover { background: #5a5a5a; }
+
+/* Empty State */
+.empty-state {
+  color: #86909c;
+  text-align: center;
+  padding: 32px 20px;
+  font-size: 13px;
+}
+
+/* Messages (within barrage viewer) */
+.msg {
+  padding: 6px 0;
+  font-size: 13px;
+  border-bottom: 1px solid #f5f7fa;
+  line-height: 1.5;
+}
+.msg:last-child { border-bottom: none; }
+.msg .time {
+  color: #86909c;
+  font-size: 11px;
+  margin-right: 8px;
+  font-family: 'SF Mono', Menlo, Consolas, monospace;
+}
+.msg .user {
+  color: #1677ff;
+  margin-right: 6px;
+  font-weight: 600;
+}
+.msg .content { color: #1d2129; }
+.msg.gift .content { color: #ff7d00; font-weight: 600; }
+.msg.like .content { color: #f53f3f; }
+.msg.social .content { color: #00b42a; }
+.msg.lucky_bag .content { color: #ff7d00; font-weight: 600; }
+
+/* ===== RESPONSIVE ===== */
+
+@media (max-width: 1199px) {
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .dashboard-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 767px) {
+  .container { padding: 12px; }
+  .header-inner { padding: 0 12px; }
+  .header-icon { width: 32px; height: 32px; font-size: 14px; }
+  .header-title { font-size: 16px; }
+  .header-sub { font-size: 11px; }
+
+  .stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 8px;
+  }
+  .stat-card { padding: 12px; }
+  .stat-value { font-size: 20px; }
+  .stat-label { font-size: 11px; }
+
+  .card { padding: 12px; border-radius: 6px; }
+
+  .recording-row { padding: 8px 0; }
+  .rec-file { min-width: 100%; }
+  .rec-meta { min-width: 100%; }
+
+  .minicard { padding: 10px 12px; }
+
+  .log-terminal {
+    padding: 12px;
+    font-size: 11px;
+    min-height: 220px;
+    overflow-x: auto;
+    white-space: pre;
+    word-break: normal;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-inner">
+    <div class="header-icon"><i class="fas fa-satellite-dish"></i></div>
+    <div>
+      <div class="header-title">DouyinBarrage</div>
+      <div class="header-sub">弹幕采集 + 录制控制台</div>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<!-- Stats -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue"><i class="fas fa-door-open"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ api_rooms|length if api_rooms else 0 }}</div>
+      <div class="stat-label">监控房间</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-green"><i class="fas fa-circle"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ (api_status or {}).get('recording', 0) }}</div>
+      <div class="stat-label">录制中</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue"><i class="fas fa-video"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ recordings|length }}</div>
+      <div class="stat-label">录制文件</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-orange"><i class="fas fa-comment-dots"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ barrage_dbs|length }}</div>
+      <div class="stat-label">弹幕库</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue"><i class="fas fa-hard-drive"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ "%.2f"|format(total_size / 1024) }}<span class="unit">GB</span></div>
+      <div class="stat-label">直播总大小</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-red"><i class="fas fa-message"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ "%.2f"|format(total_barrage_count / 10000) }}<span class="unit">万</span></div>
+      <div class="stat-label">弹幕总数量</div>
+    </div>
+  </div>
+</div>
+
+<!-- Nav -->
+<nav class="nav-bar">
+  <a href="/files/"><i class="fas fa-folder-open"></i> 文件管理</a>
+</nav>
+
+<!-- Dashboard Grid -->
+<div class="dashboard-grid">
+
+  <!-- Left: Recordings -->
+  <div class="card">
+    <div class="card-title"><i class="fas fa-film"></i> 录制文件</div>
+    {% if recordings %}
+    <div class="recordings-list">
+      {% for f in recordings %}
+      <div class="recording-row">
+        <div class="rec-file">
+          {% if f.path.endswith('.mp4') or f.path.endswith('.ts') %}
+            <a href="/play{{ f.path }}">{{ f.name }}</a>
+          {% else %}{{ f.name }}{% endif %}
+        </div>
+        <div class="rec-meta">
+          <span>{{ f.size_mb }}MB · {{ f.modified }}</span>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<div class="empty-state">暂无录制文件</div>{% endif %}
+  </div>
+
+  <!-- Right: Monitoring Rooms + Barrage -->
+  <div class="dashboard-right">
+
+    <!-- Monitoring Rooms -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-door-open"></i> 监控房间</div>
+      {% if api_rooms %}
+      <div class="rooms-grid">
+        {% for room in api_rooms %}
+        <div class="room-card">
+          <div class="room-card-header">
+            <span class="room-card-name"><i class="fas fa-user" style="color:#1677ff;margin-right:6px;width:14px"></i> {{ room.anchor_name or room.name or '未知' }}</span>
+            {% set status_map = {'collecting': '直播中', 'waiting': '等待开播', 'disabled': '已禁用', 'offline': '离线'} %}
+            {% set badge_map = {'collecting': 'badge-green', 'waiting': 'badge-orange', 'disabled': 'badge-red', 'offline': 'badge-gray'} %}
+            {% set icon_map = {'collecting': 'fa-circle', 'waiting': 'fa-clock', 'disabled': 'fa-ban', 'offline': 'fa-power-off'} %}
+            {% set status = room.live_status if room.live_status in status_map else 'offline' %}
+            <span class="badge {{ badge_map[status] }}"><i class="fas {{ icon_map[status] }}"></i> {{ status_map[status] }}</span>
+          </div>
+          <div class="room-card-id"><i class="fas fa-hashtag" style="color:#86909c;margin-right:4px;width:12px"></i> {{ room.id }}</div>
+          <div class="room-card-stats">
+            <span class="stat-item"><i class="fas fa-comment-dots" style="color:#1677ff"></i> 弹幕 {{ room.msg_count|default(0) }}</span>
+            {% if room.is_recording and room.rec_elapsed %}
+            {% set total_seconds = room.rec_elapsed|int %}
+            {% set hours = total_seconds // 3600 %}
+            {% set minutes = (total_seconds % 3600) // 60 %}
+            {% set seconds = total_seconds % 60 %}
+            <span class="stat-item"><i class="fas fa-circle" style="color:#f53f3f;font-size:8px"></i> 录制 {{ "%02d:%02d:%02d"|format(hours, minutes, seconds) }}</span>
+            {% endif %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="empty-state">暂无监控房间</div>{% endif %}
+    </div>
+
+    <!-- Barrage -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-comments"></i> 弹幕数据</div>
+      {% if barrage_dbs %}
+      <div class="minicard-grid">
+        {% for db in barrage_dbs %}
+        <div class="minicard">
+          <div class="minicard-header">
+            <span><i class="fas fa-user" style="color:#1677ff;margin-right:6px"></i>{{ db.anchor }}</span>
+            <button class="btn-sm" onclick="viewBarrage('{{ db.path }}','{{ db.anchor }}')"><i class="fas fa-eye"></i> 查看</button>
+          </div>
+          <div class="minicard-body">
+            <div class="minicard-item">
+              <span class="lbl">弹幕数</span>
+              <span class="val" style="color:#1677ff">{{ db.msg_count }}</span>
+            </div>
+            <div class="minicard-item">
+              <span class="lbl">大小</span>
+              <span class="val" style="color:#1677ff">{{ db.size_mb }}MB</span>
+            </div>
+            <div class="minicard-item" style="grid-column:1/-1">
+              <span class="lbl">更新</span>
+              <span class="val" style="color:#1677ff">{{ db.modified }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="empty-state">暂无弹幕数据</div>{% endif %}
+
+      <!-- Barrage Viewer -->
+      <div id="barrage-viewer" class="barrage-viewer" style="display:none">
+        <div class="viewer-header">
+          <span id="bv-title" class="viewer-title"></span>
+          <span id="bv-count" class="viewer-count"></span>
+          <button class="btn-sm viewer-close" onclick="document.getElementById('barrage-viewer').style.display='none'">关闭</button>
+        </div>
+        <div id="bv-list" class="log-terminal" style="max-height:400px;background:#fff;color:#1d2129;border:1px solid #e5e6eb"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Log Terminal -->
+<div class="card">
+  <div class="card-title"><i class="fas fa-terminal"></i> 弹幕日志</div>
+  <div class="log-terminal">{{ logs|join('') or '(无日志)' }}</div>
+</div>
+
+</div>
+
+<script>
+function viewBarrage(dbPath, anchor) {
+  const viewer = document.getElementById('barrage-viewer');
+  const list = document.getElementById('bv-list');
+  document.getElementById('bv-title').textContent = anchor;
+  list.innerHTML = '<div class="empty-state">加载中...</div>';
+  viewer.style.display = 'block';
+  fetch('/api/barrage?db_path=' + encodeURIComponent(dbPath) + '&limit=100&sort=asc')
+    .then(r => r.json())
+    .then(data => {
+      const barrage = data.barrage || [];
+      document.getElementById('bv-count').textContent = barrage.length + ' 条';
+      if (!barrage.length) { list.innerHTML = '<div class="empty-state">无弹幕数据</div>'; return; }
+      list.innerHTML = barrage.map(b => {
+        const d = new Date(b.time * 1000);
+        const t = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+        return '<div class="msg ' + b.type + '"><span class="time">' + t + '</span><span class="user">' + esc(b.user) + '</span><span class="content">' + esc(b.content) + '</span></div>';
+      }).join('');
+      list.scrollTop = list.scrollHeight;
+    })
+    .catch(() => { list.innerHTML = '<div class="empty-state">加载失败</div>'; });
+}
+function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+window.addEventListener('DOMContentLoaded', function() {
+  var logEl = document.querySelector('.log-terminal');
+  if (logEl) logEl.scrollTop = logEl.scrollHeight;
+});
+</script>
+</body>
+</html>
