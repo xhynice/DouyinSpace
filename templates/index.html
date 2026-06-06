@@ -662,6 +662,7 @@ body {
         <div class="minicard">
           <div class="minicard-header">
             <span><i class="fas fa-user" style="color:#00b42a;margin-right:6px"></i>{{ user.nickname }}</span>
+            <span style="font-size:11px;color:#86909c;font-weight:400">{{ user.last_update or '' }}</span>
           </div>
           <div class="minicard-body">
             <div class="minicard-item">
@@ -679,10 +680,6 @@ body {
             <div class="minicard-item">
               <span class="lbl">已下载</span>
               <span class="val" style="color:#00b42a">{{ user.media_downloaded }}</span>
-            </div>
-            <div class="minicard-item">
-              <span class="lbl">更新</span>
-              <span class="val" style="color:#1677ff">{{ user.last_update or '无' }}</span>
             </div>
           </div>
         </div>
