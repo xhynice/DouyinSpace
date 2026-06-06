@@ -244,32 +244,44 @@ def query_api(path):
 def get_comment_stats():
     """获取 DouyinComment 采集统计。"""
     now = time.time()
+    # 计算 mtime 指纹：config + 所有用户 db
+    mtimes = []
     try:
-        db_mtime = os.path.getmtime(COMMENT_DB) if os.path.exists(COMMENT_DB) else 0
+        mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
     except OSError:
-        db_mtime = 0
+        mtimes.append(0)
+    for db_file in sorted(glob.glob(os.path.join(COMMENT_DIR, "*", "sqlite.db"))):
+        try:
+            mtimes.append(os.path.getmtime(db_file))
+        except OSError:
+            mtimes.append(0)
+    db_mtime = tuple(mtimes)
     if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == db_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
         return _comment_stats_cache["data"]
     stats = {"users": 0, "videos": 0, "comments": 0, "replies": 0}
-    # 读取配置获取用户数
+    # 读取配置获取用户列表
     config_path = "/app/DouyinComment/config.yaml"
+    enabled_users = []
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
-        users = config.get("users", [])
-        stats["users"] = sum(1 for u in users if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#"))
+        enabled_users = [u for u in config.get("users", []) if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#")]
+        stats["users"] = len(enabled_users)
     except Exception as e:
         logger.warning(f"[评论统计] 读取配置失败: {e}")
-    # 读取数据库统计
-    if os.path.exists(COMMENT_DB):
+    # 遍历每个用户的数据库汇总
+    for u in enabled_users:
+        user_db = os.path.join(COMMENT_DIR, u.get("sec_uid", ""), "sqlite.db")
+        if not os.path.exists(user_db):
+            continue
         conn = None
         try:
-            conn = sqlite3.connect(f"file:{COMMENT_DB}?mode=ro", uri=True)
-            stats["videos"] = conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
-            stats["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
-            stats["replies"] = conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
+            conn = sqlite3.connect(f"file:{user_db}?mode=ro", uri=True)
+            stats["videos"] += conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+            stats["comments"] += conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
+            stats["replies"] += conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
         except Exception as e:
-            logger.warning(f"[评论统计] 查询数据库失败: {e}")
+            logger.warning(f"[评论统计] 查询数据库失败 ({u.get('nickname', '')}): {e}")
         finally:
             if conn:
                 conn.close()
