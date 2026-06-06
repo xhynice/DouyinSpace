@@ -44,7 +44,7 @@ HF_BUCKET = os.environ.get("HF_BUCKET", "Douyin-storage")
 BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
 
 # ── DouyinComment ──
-COMMENT_DIR = "/data2/DouyinComment/data"
+COMMENT_DIR = "/data/DouyinComment/data"
 COMMENT_DB = os.path.join(COMMENT_DIR, "database", "sqlite.db")
 COMMENT_CACHE_TTL = 900  # mtime不变时15分钟有效
 _comment_stats_cache = {"data": None, "ts": 0, "mtime": 0}
