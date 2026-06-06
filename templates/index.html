@@ -526,6 +526,27 @@ body {
       <div class="stat-label">弹幕总数量</div>
     </div>
   </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-green"><i class="fas fa-users"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ comment_stats.users }}</div>
+      <div class="stat-label">采集用户</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-orange"><i class="fas fa-video"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ comment_stats.videos }}</div>
+      <div class="stat-label">总作品数</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue"><i class="fas fa-comments"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ comment_stats.comments + comment_stats.replies }}</div>
+      <div class="stat-label">总评论回复</div>
+    </div>
+  </div>
 </div>
 
 <!-- Nav -->
@@ -536,28 +557,7 @@ body {
 <!-- Dashboard Grid -->
 <div class="dashboard-grid">
 
-  <!-- Left: Recordings -->
-  <div class="card">
-    <div class="card-title"><i class="fas fa-film"></i> 录制文件</div>
-    {% if recordings %}
-    <div class="recordings-list">
-      {% for f in recordings %}
-      <div class="recording-row">
-        <div class="rec-file">
-          {% if f.path.endswith('.mp4') or f.path.endswith('.ts') %}
-            <a href="/play{{ f.path }}">{{ f.name }}</a>
-          {% else %}{{ f.name }}{% endif %}
-        </div>
-        <div class="rec-meta">
-          <span>{{ f.size_mb }}MB · {{ f.modified }}</span>
-        </div>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<div class="empty-state">暂无录制文件</div>{% endif %}
-  </div>
-
-  <!-- Right: Monitoring Rooms + Barrage -->
+  <!-- Left: Monitoring Rooms + Recordings -->
   <div class="dashboard-right">
 
     <!-- Monitoring Rooms -->
@@ -591,6 +591,31 @@ body {
       </div>
       {% else %}<div class="empty-state">暂无监控房间</div>{% endif %}
     </div>
+
+    <!-- Recordings -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-film"></i> 录制文件</div>
+      {% if recordings %}
+      <div class="recordings-list">
+        {% for f in recordings %}
+        <div class="recording-row">
+          <div class="rec-file">
+            {% if f.path.endswith('.mp4') or f.path.endswith('.ts') %}
+              <a href="/play{{ f.path }}">{{ f.name }}</a>
+            {% else %}{{ f.name }}{% endif %}
+          </div>
+          <div class="rec-meta">
+            <span>{{ f.size_mb }}MB · {{ f.modified }}</span>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="empty-state">暂无录制文件</div>{% endif %}
+    </div>
+  </div>
+
+  <!-- Right: Barrage + Comment -->
+  <div class="dashboard-right">
 
     <!-- Barrage -->
     <div class="card">
@@ -632,6 +657,44 @@ body {
         <div id="bv-list" class="log-terminal" style="max-height:400px;background:#fff;color:#1d2129;border:1px solid #e5e6eb"></div>
       </div>
     </div>
+
+    <!-- Comment Users -->
+    <div class="card">
+      <div class="card-title"><i class="fas fa-users"></i> 作品数据</div>
+      {% if comment_users %}
+      <div class="minicard-grid">
+        {% for user in comment_users %}
+        <div class="minicard">
+          <div class="minicard-header">
+            <span><i class="fas fa-user" style="color:#00b42a;margin-right:6px"></i>{{ user.nickname }}</span>
+          </div>
+          <div class="minicard-body">
+            <div class="minicard-item">
+              <span class="lbl">作品</span>
+              <span class="val" style="color:#1677ff">{{ user.videos }}</span>
+            </div>
+            <div class="minicard-item">
+              <span class="lbl">评论</span>
+              <span class="val" style="color:#1677ff">{{ user.comments }}</span>
+            </div>
+            <div class="minicard-item">
+              <span class="lbl">回复</span>
+              <span class="val" style="color:#1677ff">{{ user.replies }}</span>
+            </div>
+            <div class="minicard-item">
+              <span class="lbl">已下载</span>
+              <span class="val" style="color:#00b42a">{{ user.media_downloaded }}</span>
+            </div>
+            <div class="minicard-item" style="grid-column:1/-1">
+              <span class="lbl">更新</span>
+              <span class="val" style="color:#1677ff">{{ user.last_update or '无' }}</span>
+            </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+      {% else %}<div class="empty-state">暂无评论采集用户</div>{% endif %}
+    </div>
   </div>
 </div>
 
@@ -639,6 +702,12 @@ body {
 <div class="card">
   <div class="card-title"><i class="fas fa-terminal"></i> 弹幕日志</div>
   <div class="log-terminal">{{ logs|join('') or '(无日志)' }}</div>
+</div>
+
+<!-- Daily Crawl Log Terminal -->
+<div class="card" style="margin-top:16px">
+  <div class="card-title"><i class="fas fa-clock"></i> 作品采集日志</div>
+  <div class="log-terminal">{{ cron_logs|join('') or '(无日志)' }}</div>
 </div>
 
 </div>

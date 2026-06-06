@@ -11,17 +11,23 @@
 
 import glob
 import json
+import logging
 import os
 import re
 import sqlite3
 import time
+import ast
 import urllib.request
 import urllib.error
 from datetime import datetime
 from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 
+import yaml
 from flask import Flask, jsonify, request, render_template, Response
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
+logger = logging.getLogger(__name__)
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
@@ -36,6 +42,16 @@ LOG_DIR = "/data/logs"
 HF_USER = os.environ.get("HF_USER", "sunset139")
 HF_BUCKET = os.environ.get("HF_BUCKET", "Douyin-storage")
 BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
+
+# ── DouyinComment ──
+COMMENT_DIR = "/data2/DouyinComment/data"
+COMMENT_DB = os.path.join(COMMENT_DIR, "database", "sqlite.db")
+COMMENT_CACHE_TTL = 900  # mtime不变时15分钟有效
+_comment_stats_cache = {"data": None, "ts": 0, "mtime": 0}
+_comment_users_cache = {"data": None, "ts": 0, "mtime": 0}
+BARRAGE_CACHE_TTL = 1200  # mtime不变时20分钟有效
+_barrage_cache = {}  # key -> {"data": [...], "ts": float, "mtime": float}
+BARRAGE_CACHE_MAX = 50  # 最多缓存50个查询
 
 # ── 弹幕进程 API ──
 BARRAGE_API = os.environ.get("BARRAGE_API", "http://127.0.0.1:8088")
@@ -156,15 +172,26 @@ def get_recordings():
 DB_EXT = {'.db'}
 _table_cache = {}
 _db_connections = {}  # 复用连接
+DB_CONN_MAX = 10  # 最多缓存10个连接
 
 def _get_db_conn(db_path):
     """获取只读数据库连接（复用）。"""
     if db_path not in _db_connections:
+        # 超过上限，关闭最久没用的连接
+        if len(_db_connections) >= DB_CONN_MAX:
+            oldest_key = min(_db_connections, key=lambda k: _db_connections[k]["ts"])
+            try:
+                _db_connections[oldest_key]["conn"].close()
+            except Exception:
+                pass
+            del _db_connections[oldest_key]
         conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         conn.execute("PRAGMA cache_size=-32000")  # 32MB 缓存
         conn.execute("PRAGMA temp_store=MEMORY")
-        _db_connections[db_path] = conn
-    return _db_connections[db_path]
+        _db_connections[db_path] = {"conn": conn, "ts": time.time()}
+    else:
+        _db_connections[db_path]["ts"] = time.time()
+    return _db_connections[db_path]["conn"]
 
 def _get_existing_tables(db_path):
     """缓存表结构。"""
@@ -214,6 +241,160 @@ def query_api(path):
         return None
 
 
+def get_comment_stats():
+    """获取 DouyinComment 采集统计。"""
+    now = time.time()
+    try:
+        db_mtime = os.path.getmtime(COMMENT_DB) if os.path.exists(COMMENT_DB) else 0
+    except OSError:
+        db_mtime = 0
+    if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == db_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
+        return _comment_stats_cache["data"]
+    stats = {"users": 0, "videos": 0, "comments": 0, "replies": 0}
+    # 读取配置获取用户数
+    config_path = "/app/DouyinComment/config.yaml"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        users = config.get("users", [])
+        stats["users"] = sum(1 for u in users if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#"))
+    except Exception as e:
+        logger.warning(f"[评论统计] 读取配置失败: {e}")
+    # 读取数据库统计
+    if os.path.exists(COMMENT_DB):
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{COMMENT_DB}?mode=ro", uri=True)
+            stats["videos"] = conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+            stats["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
+            stats["replies"] = conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
+        except Exception as e:
+            logger.warning(f"[评论统计] 查询数据库失败: {e}")
+        finally:
+            if conn:
+                conn.close()
+    _comment_stats_cache["data"] = stats
+    _comment_stats_cache["ts"] = now
+    _comment_stats_cache["mtime"] = db_mtime
+    return stats
+
+
+def get_latest_daily_crawl_log():
+    """获取最新的 daily_crawl 日志。"""
+    log_dir = "/data/logs"
+    pattern = os.path.join(log_dir, "daily_crawl_*.log")
+    files = sorted(glob.glob(pattern), reverse=True)
+    if files:
+        return read_log(files[0], 100)
+    return []
+
+
+def get_comment_users():
+    """获取每个用户的评论采集统计。"""
+    now = time.time()
+    # 计算 mtime 指纹：config.yaml + 所有用户 db
+    mtimes = []
+    try:
+        mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
+    except OSError:
+        mtimes.append(0)
+    for db_file in sorted(glob.glob(os.path.join(COMMENT_DIR, "*", "sqlite.db"))):
+        try:
+            mtimes.append(os.path.getmtime(db_file))
+        except OSError:
+            mtimes.append(0)
+    cfg_mtime = tuple(mtimes)
+    if _comment_users_cache["data"] and _comment_users_cache["mtime"] == cfg_mtime and now - _comment_users_cache["ts"] < COMMENT_CACHE_TTL:
+        return _comment_users_cache["data"]
+    users = []
+    config_path = "/app/DouyinComment/config.yaml"
+    try:
+        with open(config_path, "r", encoding="utf-8") as f:
+            config = yaml.safe_load(f)
+        for u in config.get("users", []):
+            if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#"):
+                users.append({
+                    "sec_uid": u.get("sec_uid", ""),
+                    "nickname": u.get("nickname", "未知"),
+                    "videos": 0,
+                    "comments": 0,
+                    "replies": 0,
+                    "media_downloaded": 0,
+                    "last_update": None,
+                })
+    except Exception as e:
+        logger.warning(f"[用户统计] 读取配置失败: {e}")
+    # 读取每个用户的数据库
+    for user in users:
+        user_db = os.path.join(COMMENT_DIR, user["sec_uid"], "sqlite.db")
+        if not os.path.exists(user_db):
+            continue
+        conn = None
+        try:
+            conn = sqlite3.connect(f"file:{user_db}?mode=ro", uri=True)
+            user["videos"] = conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
+            user["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
+            user["replies"] = conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
+            # 统计已下载资源（md5 文件名 = 已下载）
+            user["media_downloaded"] = _count_downloaded_media(conn)
+            # 获取最后更新时间
+            row = conn.execute("SELECT MAX(create_time) FROM videos").fetchone()
+            if row and row[0]:
+                user["last_update"] = datetime.fromtimestamp(row[0]).strftime("%Y-%m-%d %H:%M")
+        except Exception as e:
+            logger.warning(f"[用户统计] 查询数据库失败 ({user['nickname']}): {e}")
+        finally:
+            if conn:
+                conn.close()
+    _comment_users_cache["data"] = users
+    _comment_users_cache["ts"] = now
+    _comment_users_cache["mtime"] = cfg_mtime
+    return users
+
+
+def _count_downloaded_media(conn):
+    """统计已下载资源数量（md5 文件名 = 已下载，URL = 未下载）。"""
+    downloaded = 0
+    # 单值字段
+    for row in conn.execute("SELECT thumb, video FROM videos"):
+        for field in row:
+            if field and field.strip() and not field.strip().startswith("http"):
+                downloaded += 1
+    # 数组字段：videos.images, comments.image_list, replies.image_list, comments.sticker, replies.sticker
+    for sql in [
+        "SELECT images FROM videos WHERE images IS NOT NULL AND images != ''",
+        "SELECT image_list FROM comments WHERE image_list IS NOT NULL AND image_list != ''",
+        "SELECT image_list FROM replies WHERE image_list IS NOT NULL AND image_list != ''",
+    ]:
+        for row in conn.execute(sql):
+            downloaded += _count_in_field(row[0])
+    # 单值字段：avatar、sticker
+    for sql in [
+        "SELECT user_avatar, sticker FROM comments",
+        "SELECT user_avatar, sticker FROM replies",
+    ]:
+        for row in conn.execute(sql):
+            for field in row:
+                if field and field.strip() and not field.strip().startswith("http"):
+                    if field.strip().startswith("["):
+                        downloaded += _count_in_field(field)
+                    else:
+                        downloaded += 1
+    return downloaded
+
+
+def _count_in_field(value):
+    """解析字段值，统计非 URL 的资源数量。"""
+    if not value or not value.strip():
+        return 0
+    try:
+        items = ast.literal_eval(value) if value.strip().startswith("[") else [value]
+        return sum(1 for item in items if item and str(item).strip() and not str(item).strip().startswith("http"))
+    except Exception as e:
+        logger.debug(f"[资源统计] 解析字段失败: {e}")
+        return 0
+
+
 def find_db_for_video(video_path, dbs=None):
     for db in (dbs or get_barrage_dbs()):
         if db["anchor"] in video_path:
@@ -237,6 +418,18 @@ def get_anchor_files(video_path, recordings=None):
 
 
 def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None):
+    # 检查缓存
+    cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None)
+    now = time.time()
+    try:
+        db_mtime = os.path.getmtime(db_path)
+    except OSError:
+        db_mtime = 0
+    if cache_key in _barrage_cache:
+        cached = _barrage_cache[cache_key]
+        if cached["mtime"] == db_mtime and now - cached["ts"] < BARRAGE_CACHE_TTL:
+            return cached["data"]
+    # 缓存未命中，查询数据库
     conds, params = [], []
     if t_from:
         conds.append("time >= ?"); params.append(int(t_from))
@@ -283,7 +476,6 @@ def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc"
                 # 解析等级数字 [等级N] -> N
                 grade_num = ""
                 if grade:
-                    import re
                     m = re.search(r'\d+', grade)
                     if m:
                         grade_num = m.group()
@@ -302,6 +494,12 @@ def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc"
                 })
     except Exception:
         pass
+    # 存入缓存
+    if len(_barrage_cache) >= BARRAGE_CACHE_MAX:
+        # 删除最旧的缓存
+        oldest_key = min(_barrage_cache, key=lambda k: _barrage_cache[k]["ts"])
+        del _barrage_cache[oldest_key]
+    _barrage_cache[cache_key] = {"data": results, "ts": time.time(), "mtime": db_mtime}
     return results
 
 
@@ -317,6 +515,8 @@ def index():
     barrage_dbs = get_barrage_dbs()
     total_size = sum(f["size_mb"] for f in recordings)
     total_barrage_count = sum(db.get("msg_count", 0) for db in barrage_dbs)
+    comment_stats = get_comment_stats()
+    comment_users = get_comment_users()
     return render_template("index.html",
         api_status=api_status,
         api_rooms=api_rooms or [],
@@ -324,7 +524,10 @@ def index():
         barrage_dbs=barrage_dbs,
         total_size=total_size,
         total_barrage_count=total_barrage_count,
+        comment_stats=comment_stats,
+        comment_users=comment_users,
         logs=read_log(os.path.join(LOG_DIR, "barrage_stdout.log"), 150),
+        cron_logs=get_latest_daily_crawl_log(),
     )
 
 

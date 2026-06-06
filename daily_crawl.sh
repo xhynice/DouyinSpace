@@ -16,7 +16,7 @@
 
 set -e
 
-LOG_FILE="/data2/logs/daily_crawl_$(date +%Y%m%d).log"
+LOG_FILE="/data/logs/daily_crawl_$(date +%Y%m%d).log"
 mkdir -p "$(dirname "$LOG_FILE")"
 
 APP_DIR="/app/DouyinComment"
