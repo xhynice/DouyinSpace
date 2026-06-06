@@ -47,4 +47,6 @@ fi
 
 # 5. 启动服务
 echo "[6/6] 启动 supervisord..."
+# 临时：首次启动运行 daily_crawl.sh 测试
+/bin/bash /app/daily_crawl.sh &
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
