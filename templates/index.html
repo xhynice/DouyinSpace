@@ -343,30 +343,6 @@ body {
   gap: 4px;
 }
 
-/* Barrage Viewer */
-.barrage-viewer {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #e5e6eb;
-}
-.viewer-header {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-}
-.viewer-title {
-  font-weight: 600;
-  font-size: 13px;
-  color: #1d2129;
-}
-.viewer-count {
-  color: #86909c;
-  font-size: 12px;
-}
-.viewer-close { margin-left: auto; }
-
 /* Log Terminal */
 .log-terminal {
   background: #1d2129;
@@ -641,15 +617,6 @@ body {
       </div>
       {% else %}<div class="empty-state">暂无弹幕数据</div>{% endif %}
 
-      <!-- Barrage Viewer -->
-      <div id="barrage-viewer" class="barrage-viewer" style="display:none">
-        <div class="viewer-header">
-          <span id="bv-title" class="viewer-title"></span>
-          <span id="bv-count" class="viewer-count"></span>
-          <button class="btn-sm viewer-close" onclick="document.getElementById('barrage-viewer').style.display='none'">关闭</button>
-        </div>
-        <div id="bv-list" class="log-terminal" style="max-height:400px;background:#fff;color:#1d2129;border:1px solid #e5e6eb"></div>
-      </div>
     </div>
 
     <!-- Comment Users -->
@@ -704,27 +671,6 @@ body {
 </div>
 
 <script>
-function viewBarrage(dbPath, anchor) {
-  const viewer = document.getElementById('barrage-viewer');
-  const list = document.getElementById('bv-list');
-  document.getElementById('bv-title').textContent = anchor;
-  list.innerHTML = '<div class="empty-state">加载中...</div>';
-  viewer.style.display = 'block';
-  fetch('/api/barrage?db_path=' + encodeURIComponent(dbPath) + '&limit=100&sort=asc')
-    .then(r => r.json())
-    .then(data => {
-      const barrage = data.barrage || [];
-      document.getElementById('bv-count').textContent = barrage.length + ' 条';
-      if (!barrage.length) { list.innerHTML = '<div class="empty-state">无弹幕数据</div>'; return; }
-      list.innerHTML = barrage.map(b => {
-        const d = new Date(b.time * 1000);
-        const t = String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-        return '<div class="msg ' + b.type + '"><span class="time">' + t + '</span><span class="user">' + esc(b.user) + '</span><span class="content">' + esc(b.content) + '</span></div>';
-      }).join('');
-      list.scrollTop = list.scrollHeight;
-    })
-    .catch(() => { list.innerHTML = '<div class="empty-state">加载失败</div>'; });
-}
 function esc(s) { const d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
 window.addEventListener('DOMContentLoaded', function() {
   var logEl = document.querySelector('.log-terminal');
