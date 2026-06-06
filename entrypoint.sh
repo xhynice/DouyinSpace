@@ -15,6 +15,9 @@ if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/
     cp /tmp/space/DouyinBarrage/config.yaml /app/DouyinBarrage/config.yaml 2>/dev/null || true
     cp /tmp/space/DouyinBarrage/rooms.txt /app/DouyinBarrage/rooms.txt 2>/dev/null || true
     cp /tmp/space/DouyinComment/config.yaml /app/DouyinComment/config.yaml 2>/dev/null || true
+    cp /tmp/space/app.py /app/app.py 2>/dev/null || true
+    cp -r /tmp/space/templates /app/ 2>/dev/null || true
+    cp /tmp/space/daily_crawl.sh /app/daily_crawl.sh 2>/dev/null || true
     rm -rf /tmp/space
     echo "[3/6] 配置文件已更新"
 else
