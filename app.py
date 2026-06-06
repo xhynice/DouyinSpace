@@ -339,6 +339,8 @@ def get_comment_users():
     # 读取每个用户的数据库
     for user in users:
         user_db = os.path.join(COMMENT_DIR, user["sec_uid"], "sqlite.db")
+        # 头像 URL（从 sunset139/douyin 桶获取）
+        user["avatar_url"] = f"https://huggingface.co/buckets/sunset139/douyin/resolve/DouyinComment/data/{user['sec_uid']}/avatar.jpg"
         if not os.path.exists(user_db):
             continue
         conn = None

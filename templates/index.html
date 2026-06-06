@@ -661,7 +661,7 @@ body {
         {% for user in comment_users %}
         <div class="minicard">
           <div class="minicard-header">
-            <span><i class="fas fa-user" style="color:#00b42a;margin-right:6px"></i>{{ user.nickname }}</span>
+            <span><img src="{{ user.avatar_url }}" style="width:20px;height:20px;border-radius:50%;margin-right:6px;object-fit:cover" onerror="this.style.display='none'">{{ user.nickname }}</span>
             <span style="font-size:11px;color:#86909c;font-weight:400">{{ user.last_update or '' }}</span>
           </div>
           <div class="minicard-body">
