@@ -229,6 +229,32 @@ body {
   border-radius: 8px;
   padding: 12px 16px;
 }
+.minicard-bg {
+  position: relative;
+  overflow: hidden;
+  border: none;
+}
+.minicard-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(2px);
+  transform: scale(1.05);
+  z-index: 0;
+}
+.minicard-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(255,255,255,0.82);
+  z-index: 1;
+}
+.minicard-bg > * {
+  position: relative;
+  z-index: 2;
+}
 .minicard-header {
   display: flex;
   align-items: center;
@@ -520,6 +546,8 @@ body {
 
 <!-- Nav -->
 <nav class="nav-bar">
+  <a href="/barrage/"><i class="fas fa-comments"></i> 弹幕展示</a>
+  <a href="/comment/"><i class="fas fa-video"></i> 作品展示</a>
   <a href="/files/"><i class="fas fa-folder-open"></i> 文件管理</a>
 </nav>
 
@@ -594,9 +622,9 @@ body {
       {% if barrage_dbs %}
       <div class="minicard-grid">
         {% for db in barrage_dbs %}
-        <div class="minicard">
+        <div class="minicard minicard-bg" style="background-image:url('{{ db.cover_url }}')">
           <div class="minicard-header">
-            <span><i class="fas fa-user" style="color:#1677ff;margin-right:6px"></i>{{ db.anchor }}</span>
+            <span><img src="{{ db.avatar_url }}" style="width:18px;height:18px;border-radius:50%;margin-right:4px;object-fit:cover" onerror="this.style.display='none'">{{ db.anchor }}</span>
             <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ db.modified }}</span>
           </div>
           <div class="minicard-body">

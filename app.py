@@ -24,7 +24,7 @@ from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
-from flask import Flask, jsonify, request, render_template, Response
+from flask import Flask, jsonify, request, render_template, Response, send_from_directory
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 logger = logging.getLogger(__name__)
@@ -226,6 +226,8 @@ def _stat_barrage_db(path, name):
         "size_mb": round(s.st_size / 1048576, 2),
         "modified": datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M"),
         "msg_count": msg_count,
+        "avatar_url": f"{BUCKETS_BASE}/barrage/{quote(anchor, safe='/')}/avatar.jpg?download=true",
+        "cover_url": f"{BUCKETS_BASE}/barrage/{quote(anchor, safe='/')}/cover.jpg?download=true",
     }
 
 def get_barrage_dbs():
@@ -616,6 +618,28 @@ def api_proxy(path):
 @app.route("/health")
 def health():
     return jsonify({"status": "ok"})
+
+
+# ── 弹幕前端展示 ──
+BARRAGE_DOCS_DIR = "/app/DouyinBarrage/docs"
+
+@app.route("/barrage/")
+@app.route("/barrage/<path:filepath>")
+def barrage_page(filepath=""):
+    if not filepath:
+        filepath = "index.html"
+    return send_from_directory(BARRAGE_DOCS_DIR, filepath)
+
+
+# ── 评论前端展示 ──
+COMMENT_DOCS_DIR = "/app/DouyinComment/docs"
+
+@app.route("/comment/")
+@app.route("/comment/<path:filepath>")
+def comment_page(filepath=""):
+    if not filepath:
+        filepath = "index.html"
+    return send_from_directory(COMMENT_DOCS_DIR, filepath)
 
 
 @app.route("/favicon.ico")

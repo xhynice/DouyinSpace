@@ -65,3 +65,22 @@ fi
 log "=========================================="
 log "DouyinComment 每日采集结束"
 log "=========================================="
+
+# ---------------------------------------------------------------------------
+# 4. 重新构建前端数据
+# ---------------------------------------------------------------------------
+log "[4/5] 构建弹幕前端数据..."
+cd /app/DouyinBarrage
+if python docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
+    log "[4/5] 弹幕前端构建完成"
+else
+    log "[4/5] 弹幕前端构建失败"
+fi
+
+log "[5/5] 构建评论前端数据..."
+cd /app/DouyinComment
+if python scripts/build_comment.py --sqlite --cdn "https://huggingface.co/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
+    log "[5/5] 评论前端构建完成"
+else
+    log "[5/5] 评论前端构建失败"
+fi
