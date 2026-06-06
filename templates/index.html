@@ -577,7 +577,7 @@ body {
           </div>
           <div class="room-card-id"><i class="fas fa-hashtag" style="color:#86909c;margin-right:4px;width:12px"></i> {{ room.id }}</div>
           <div class="room-card-stats">
-            {% if room.is_recording %}
+            {% if room.live_status == 'collecting' %}
             <span class="stat-item"><i class="fas fa-comment-dots" style="color:#1677ff"></i> 弹幕 {{ room.msg_count|default(0) }}</span>
             {% endif %}
             {% if room.is_recording and room.rec_elapsed %}
