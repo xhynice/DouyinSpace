@@ -24,7 +24,7 @@ from urllib.parse import quote
 from concurrent.futures import ThreadPoolExecutor
 
 import yaml
-from flask import Flask, jsonify, request, render_template, Response, send_from_directory
+from flask import Flask, jsonify, request, render_template, Response, send_from_directory, g
 
 import barrage_cache
 
