@@ -26,17 +26,33 @@ from concurrent.futures import ThreadPoolExecutor
 import yaml
 from flask import Flask, jsonify, request, render_template, Response, send_from_directory
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
-logger = logging.getLogger(__name__)
+import barrage_cache
+
+# ── 日志配置 ──
+LOG_DIR = "/data/logs"
+os.makedirs(LOG_DIR, exist_ok=True)
+LOG_FILE = os.path.join(LOG_DIR, "panel.log")
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+    ]
+)
+logger = logging.getLogger("panel")
 
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
             template_folder=os.path.join(_BASE_DIR, "templates"))
 
+# ── 启动弹幕缓存更新线程 ──
+barrage_cache.start_cache_updater()
+
 # ── 路径 ──
 BARRAGE_DIR = "/data/barrage"
 RECORDING_DIR = "/data/barrage"
-LOG_DIR = "/data/logs"
 
 # ── Buckets ──
 HF_USER = os.environ.get("HF_USER", "sunset139")
@@ -46,6 +62,7 @@ BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
 # ── DouyinComment ──
 COMMENT_DIR = "/data2/DouyinComment/data"
 COMMENT_DB = os.path.join(COMMENT_DIR, "database", "sqlite.db")
+COMMENT_CACHE_JSON = "/data/comment_cache.json"
 COMMENT_CACHE_TTL = 900  # mtime不变时15分钟有效
 _comment_stats_cache = {"data": None, "ts": 0, "mtime": 0}
 _comment_users_cache = {"data": None, "ts": 0, "mtime": 0}
@@ -170,57 +187,104 @@ def get_recordings():
 
 
 DB_EXT = {'.db'}
-_table_cache = {}
+_table_cache = {}  # key -> {"tables": set, "ts": float}
 _db_connections = {}  # 复用连接
 DB_CONN_MAX = 10  # 最多缓存10个连接
+TABLE_CACHE_TTL = 600  # 表结构缓存 10 分钟过期
+
+def _open_db_conn(db_path):
+    """打开一个新的只读数据库连接，FUSE 兼容。"""
+    # 优先用 immutable 模式（FUSE 上更稳定，跳过 WAL 恢复）
+    try:
+        conn = sqlite3.connect(f"file:{db_path}?mode=ro&immutable=1", uri=True,
+                               timeout=5)
+        conn.execute("PRAGMA cache_size=-32000")
+        conn.execute("PRAGMA temp_store=MEMORY")
+        conn.execute("SELECT 1")  # 健康检查
+        return conn
+    except Exception:
+        pass
+    # immutable 失败则退回普通只读模式
+    conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True, timeout=5)
+    conn.execute("PRAGMA cache_size=-32000")
+    conn.execute("PRAGMA temp_store=MEMORY")
+    try:
+        conn.execute("PRAGMA wal_checkpoint(PASSIVE)")
+    except Exception:
+        pass
+    return conn
 
 def _get_db_conn(db_path):
-    """获取只读数据库连接（复用）。"""
-    if db_path not in _db_connections:
-        # 超过上限，关闭最久没用的连接
-        if len(_db_connections) >= DB_CONN_MAX:
-            oldest_key = min(_db_connections, key=lambda k: _db_connections[k]["ts"])
+    """获取只读数据库连接（复用 + 健康检查）。"""
+    if db_path in _db_connections:
+        entry = _db_connections[db_path]
+        try:
+            entry["conn"].execute("SELECT 1")
+            entry["ts"] = time.time()
+            return entry["conn"]
+        except Exception:
+            logger.warning(f"[DB] 连接失效，重建: {db_path}")
             try:
-                _db_connections[oldest_key]["conn"].close()
+                entry["conn"].close()
             except Exception:
                 pass
-            del _db_connections[oldest_key]
-        conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
-        conn.execute("PRAGMA cache_size=-32000")  # 32MB 缓存
-        conn.execute("PRAGMA temp_store=MEMORY")
-        _db_connections[db_path] = {"conn": conn, "ts": time.time()}
-    else:
-        _db_connections[db_path]["ts"] = time.time()
-    return _db_connections[db_path]["conn"]
+            del _db_connections[db_path]
+    if len(_db_connections) >= DB_CONN_MAX:
+        oldest_key = min(_db_connections, key=lambda k: _db_connections[k]["ts"])
+        try:
+            _db_connections[oldest_key]["conn"].close()
+        except Exception:
+            pass
+        del _db_connections[oldest_key]
+    conn = _open_db_conn(db_path)
+    _db_connections[db_path] = {"conn": conn, "ts": time.time()}
+    return conn
 
 def _get_existing_tables(db_path):
-    """缓存表结构。"""
-    if db_path not in _table_cache:
-        try:
-            conn = _get_db_conn(db_path)
-            _table_cache[db_path] = {r[0] for r in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'")}
-        except Exception:
-            _table_cache[db_path] = set()
-    return _table_cache[db_path]
+    """缓存表结构（带 TTL，失败不缓存空集合）。"""
+    now = time.time()
+    if db_path in _table_cache:
+        entry = _table_cache[db_path]
+        if now - entry["ts"] < TABLE_CACHE_TTL and entry["tables"]:
+            return entry["tables"]
+    try:
+        conn = _get_db_conn(db_path)
+        tables = {r[0] for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'")}
+        if tables:
+            _table_cache[db_path] = {"tables": tables, "ts": now}
+            return tables
+    except Exception as e:
+        logger.warning(f"[DB] 获取表结构失败 ({db_path}): {e}")
+    # 失败时不缓存，下次重试；若旧缓存未过期则继续用旧的
+    if db_path in _table_cache and _table_cache[db_path]["tables"]:
+        return _table_cache[db_path]["tables"]
+    return set()
 
 def _stat_barrage_db(path, name):
     s = os.stat(path)
     anchor = os.path.basename(os.path.dirname(path))
     msg_count = 0
     existing = _get_existing_tables(path)
-    try:
-        conn = _get_db_conn(path)
-        for tbl in ("chat", "gift", "like", "social", "lucky_bag"):
-            if tbl in existing:
-                try:
-                    row = conn.execute(f"SELECT MAX(rowid) FROM [{tbl}]").fetchone()
-                    if row and row[0]:
-                        msg_count += row[0]
-                except Exception:
-                    pass
-    except Exception:
-        pass
+    if existing:
+        for attempt in range(2):
+            try:
+                conn = _get_db_conn(path)
+                for tbl in ("chat", "gift", "like", "social", "lucky_bag"):
+                    if tbl in existing:
+                        try:
+                            row = conn.execute(f"SELECT MAX(rowid) FROM [{tbl}]").fetchone()
+                            if row and row[0]:
+                                msg_count += row[0]
+                        except Exception as e:
+                            logger.debug(f"[DB] 查询 {tbl} 失败: {e}")
+                break
+            except Exception as e:
+                logger.warning(f"[DB] 读取弹幕DB失败 ({path}, 第{attempt+1}次): {e}")
+                # 首次失败，清除连接和表缓存后重试
+                if attempt == 0:
+                    _db_connections.pop(path, None)
+                    _table_cache.pop(path, None)
     return {
         "anchor": anchor, "path": path,
         "size_mb": round(s.st_size / 1048576, 2),
@@ -231,6 +295,9 @@ def _stat_barrage_db(path, name):
     }
 
 def get_barrage_dbs():
+    cached = barrage_cache.load_db_list()
+    if cached is not None:
+        return cached
     return _scan_files(BARRAGE_DIR, DB_EXT, "barrage", 300, _stat_barrage_db)
 
 
@@ -243,10 +310,36 @@ def query_api(path):
         return None
 
 
+def _load_comment_cache():
+    """从 JSON 缓存加载评论统计（采集后由 generate_comment_cache.py 生成）。"""
+    try:
+        mtime = os.path.getmtime(COMMENT_CACHE_JSON)
+        with open(COMMENT_CACHE_JSON, "r", encoding="utf-8") as f:
+            return json.load(f), mtime
+    except Exception:
+        return None, 0
+
+
 def get_comment_stats():
-    """获取 DouyinComment 采集统计。"""
+    """获取 DouyinComment 采集统计。优先读 JSON 缓存，失败回退查 SQLite。"""
     now = time.time()
-    # 计算 mtime 指纹：config + 所有用户 db
+    # ── 优先读 JSON 缓存 ──
+    cache_data, cache_mtime = _load_comment_cache()
+    if cache_data and cache_mtime:
+        if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == cache_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
+            return _comment_stats_cache["data"]
+        stats = cache_data.get("stats", {"users": 0, "videos": 0, "comments": 0, "replies": 0})
+        _comment_stats_cache["data"] = stats
+        _comment_stats_cache["ts"] = now
+        _comment_stats_cache["mtime"] = cache_mtime
+        return stats
+    # ── JSON 不存在，回退到 SQLite（首次启动或缓存生成失败时）──
+    return _get_comment_stats_from_db()
+
+
+def _get_comment_stats_from_db():
+    """从 SQLite 直接查询评论统计（fallback）。"""
+    now = time.time()
     mtimes = []
     try:
         mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
@@ -261,7 +354,6 @@ def get_comment_stats():
     if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == db_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
         return _comment_stats_cache["data"]
     stats = {"users": 0, "videos": 0, "comments": 0, "replies": 0}
-    # 读取配置获取用户列表
     config_path = "/app/DouyinComment/config.yaml"
     enabled_users = []
     try:
@@ -271,14 +363,13 @@ def get_comment_stats():
         stats["users"] = len(enabled_users)
     except Exception as e:
         logger.warning(f"[评论统计] 读取配置失败: {e}")
-    # 遍历每个用户的数据库汇总
     for u in enabled_users:
         user_db = os.path.join(COMMENT_DIR, u.get("sec_uid", ""), "sqlite.db")
         if not os.path.exists(user_db):
             continue
         conn = None
         try:
-            conn = sqlite3.connect(f"file:{user_db}?mode=ro", uri=True)
+            conn = _open_db_conn(user_db)
             stats["videos"] += conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
             stats["comments"] += conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
             stats["replies"] += conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
@@ -304,9 +395,23 @@ def get_latest_daily_crawl_log():
 
 
 def get_comment_users():
-    """获取每个用户的评论采集统计。"""
+    """获取每个用户的评论采集统计。优先读 JSON 缓存，失败回退查 SQLite。"""
     now = time.time()
-    # 计算 mtime 指纹：config.yaml + 所有用户 db
+    cache_data, cache_mtime = _load_comment_cache()
+    if cache_data and cache_mtime:
+        if _comment_users_cache["data"] and _comment_users_cache["mtime"] == cache_mtime and now - _comment_users_cache["ts"] < COMMENT_CACHE_TTL:
+            return _comment_users_cache["data"]
+        users = cache_data.get("users", [])
+        _comment_users_cache["data"] = users
+        _comment_users_cache["ts"] = now
+        _comment_users_cache["mtime"] = cache_mtime
+        return users
+    return _get_comment_users_from_db()
+
+
+def _get_comment_users_from_db():
+    """从 SQLite 直接查询用户统计（fallback）。"""
+    now = time.time()
     mtimes = []
     try:
         mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
@@ -330,30 +435,23 @@ def get_comment_users():
                 users.append({
                     "sec_uid": u.get("sec_uid", ""),
                     "nickname": u.get("nickname", "未知"),
-                    "videos": 0,
-                    "comments": 0,
-                    "replies": 0,
-                    "media_downloaded": 0,
-                    "last_update": None,
+                    "avatar_url": f"https://huggingface.co/buckets/sunset139/douyin/resolve/DouyinComment/data/{u.get('sec_uid', '')}/avatar.jpg",
+                    "videos": 0, "comments": 0, "replies": 0,
+                    "media_downloaded": 0, "last_update": None,
                 })
     except Exception as e:
         logger.warning(f"[用户统计] 读取配置失败: {e}")
-    # 读取每个用户的数据库
     for user in users:
         user_db = os.path.join(COMMENT_DIR, user["sec_uid"], "sqlite.db")
-        # 头像 URL（从 sunset139/douyin 桶获取）
-        user["avatar_url"] = f"https://huggingface.co/buckets/sunset139/douyin/resolve/DouyinComment/data/{user['sec_uid']}/avatar.jpg"
         if not os.path.exists(user_db):
             continue
         conn = None
         try:
-            conn = sqlite3.connect(f"file:{user_db}?mode=ro", uri=True)
+            conn = _open_db_conn(user_db)
             user["videos"] = conn.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
             user["comments"] = conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
             user["replies"] = conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
-            # 统计已下载资源（md5 文件名 = 已下载）
             user["media_downloaded"] = _count_downloaded_media(conn)
-            # 获取最后更新时间
             row = conn.execute("SELECT MAX(create_time) FROM videos").fetchone()
             if row and row[0]:
                 user["last_update"] = datetime.fromtimestamp(row[0]).strftime("%Y-%m-%d %H:%M")
@@ -434,7 +532,6 @@ def get_anchor_files(video_path, recordings=None):
 
 
 def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None):
-    # 检查缓存
     cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None)
     now = time.time()
     try:
@@ -445,7 +542,6 @@ def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc"
         cached = _barrage_cache[cache_key]
         if cached["mtime"] == db_mtime and now - cached["ts"] < BARRAGE_CACHE_TTL:
             return cached["data"]
-    # 缓存未命中，查询数据库
     conds, params = [], []
     if t_from:
         conds.append("time >= ?"); params.append(int(t_from))
@@ -465,59 +561,78 @@ def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc"
         "lucky_bag": f"SELECT time,'lucky_bag',user_name,content,'',grade,fans_club FROM lucky_bag WHERE {where}",
     }
 
-    # 按类型筛选
     if types:
         QUERIES = {k: v for k, v in ALL_QUERIES.items() if k in types}
     else:
         QUERIES = ALL_QUERIES
 
     results = []
-    try:
-        existing = _get_existing_tables(db_path)
-        conn = _get_db_conn(db_path)
-        subs, sp = [], []
-        for tbl, q in QUERIES.items():
-            if tbl in existing:
-                subs.append(q); sp.extend(params)
-        if not subs:
-            return []
-        limit_sql = f" LIMIT {limit}" if limit > 0 else ""
-        order = "DESC" if sort == "desc" else "ASC"
-        sql = " UNION ALL ".join(subs) + f" ORDER BY time {order}{limit_sql}"
-        rows = list(conn.execute(sql, sp))
-        if sort == "desc":
-            rows.reverse()
-        for r in rows:
-                t, tp, user, content, extra, grade, fans_club = r[0], r[1], r[2] or "", r[3] or "", r[4], r[5] or "", r[6] or ""
-                # 解析等级数字 [等级N] -> N
-                grade_num = ""
-                if grade:
-                    m = re.search(r'\d+', grade)
-                    if m:
-                        grade_num = m.group()
-                if tp == "gift":
-                    cnt = int(extra) if extra and extra.isdigit() and int(extra) > 1 else 0
-                    content = f"🎁 {content}" + (f"x{cnt}" if cnt else "")
-                elif tp == "like":
-                    content = f"👍 {extra or 1}赞"
-                elif tp == "social":
-                    content = f"❤️ {content or '关注'}"
-                elif tp == "lucky_bag":
-                    content = f"🧧 {content or '福袋'}"
-                results.append({
-                    "time": t, "type": tp, "user": user, "content": content,
-                    "grade": grade_num, "fans_club": fans_club
-                })
-    except Exception:
-        pass
-    # 存入缓存
+    for attempt in range(2):
+        try:
+            existing = _get_existing_tables(db_path)
+            conn = _get_db_conn(db_path)
+            subs, sp = [], []
+            for tbl, q in QUERIES.items():
+                if tbl in existing:
+                    subs.append(q); sp.extend(params)
+            if not subs:
+                return []
+            limit_sql = f" LIMIT {limit}" if limit > 0 else ""
+            order = "DESC" if sort == "desc" else "ASC"
+            sql = " UNION ALL ".join(subs) + f" ORDER BY time {order}{limit_sql}"
+            rows = list(conn.execute(sql, sp))
+            if sort == "desc":
+                rows.reverse()
+            for r in rows:
+                    t, tp, user, content, extra, grade, fans_club = r[0], r[1], r[2] or "", r[3] or "", r[4], r[5] or "", r[6] or ""
+                    grade_num = ""
+                    if grade:
+                        m = re.search(r'\d+', grade)
+                        if m:
+                            grade_num = m.group()
+                    if tp == "gift":
+                        cnt = int(extra) if extra and extra.isdigit() and int(extra) > 1 else 0
+                        content = f"🎁 {content}" + (f"x{cnt}" if cnt else "")
+                    elif tp == "like":
+                        content = f"👍 {extra or 1}赞"
+                    elif tp == "social":
+                        content = f"❤️ {content or '关注'}"
+                    elif tp == "lucky_bag":
+                        content = f"🧧 {content or '福袋'}"
+                    results.append({
+                        "time": t, "type": tp, "user": user, "content": content,
+                        "grade": grade_num, "fans_club": fans_club
+                    })
+            break
+        except Exception as e:
+            logger.warning(f"[DB] 查询弹幕失败 ({db_path}, 第{attempt+1}次): {e}")
+            if attempt == 0:
+                _db_connections.pop(db_path, None)
+                _table_cache.pop(db_path, None)
     if len(_barrage_cache) >= BARRAGE_CACHE_MAX:
-        # 删除最旧的缓存
         oldest_key = min(_barrage_cache, key=lambda k: _barrage_cache[k]["ts"])
         del _barrage_cache[oldest_key]
     _barrage_cache[cache_key] = {"data": results, "ts": time.time(), "mtime": db_mtime}
     return results
 
+
+# ══════════════════════════════════════
+#  请求日志
+# ══════════════════════════════════════
+
+@app.before_request
+def _log_request_start():
+    g._req_start = time.time()
+
+@app.after_request
+def _log_request(response):
+    if request.path.startswith("/static") or request.path == "/favicon.ico":
+        return response
+    duration = time.time() - getattr(g, "_req_start", time.time())
+    status = response.status_code
+    level = logging.WARNING if status >= 400 else logging.INFO
+    logger.log(level, "%s %s -> %s (%.1fms)", request.method, request.path, status, duration * 1000)
+    return response
 
 # ══════════════════════════════════════
 #  路由
