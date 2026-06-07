@@ -26,8 +26,6 @@ from concurrent.futures import ThreadPoolExecutor
 import yaml
 from flask import Flask, jsonify, request, render_template, Response, send_from_directory, g
 
-import barrage_cache
-
 # ── 日志配置 ──
 LOG_DIR = "/data/logs"
 os.makedirs(LOG_DIR, exist_ok=True)
@@ -46,9 +44,6 @@ logger = logging.getLogger("panel")
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
             template_folder=os.path.join(_BASE_DIR, "templates"))
-
-# ── 启动弹幕缓存更新线程 ──
-barrage_cache.start_cache_updater()
 
 # ── 路径 ──
 BARRAGE_DIR = "/data/barrage"
@@ -295,9 +290,6 @@ def _stat_barrage_db(path, name):
     }
 
 def get_barrage_dbs():
-    cached = barrage_cache.load_db_list()
-    if cached is not None:
-        return cached
     return _scan_files(BARRAGE_DIR, DB_EXT, "barrage", 300, _stat_barrage_db)
 
 
