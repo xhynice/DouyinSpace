@@ -259,7 +259,8 @@ body {
 .minicard-header {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 10px;
   margin-bottom: 8px;
   font-size: 13px;
   font-weight: 600;
@@ -626,7 +627,8 @@ body {
         {% for db in barrage_dbs %}
         <div class="minicard minicard-bg" style="background-image:url('{{ db.cover_url }}')">
           <div class="minicard-header">
-            <span style="display:flex;align-items:center"><img src="{{ db.avatar_url }}" style="width:24px;height:24px;border-radius:50%;margin-right:6px;object-fit:cover" onerror="this.style.display='none'">{{ db.anchor }}</span>
+            <img src="{{ db.avatar_url }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
+            <span>{{ db.anchor }}</span>
             <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ db.modified }}</span>
           </div>
           <div class="minicard-body">
@@ -654,7 +656,8 @@ body {
         {% for user in comment_users %}
         <div class="minicard">
           <div class="minicard-header">
-            <span style="display:flex;align-items:center"><img src="{{ user.avatar_url }}" style="width:24px;height:24px;border-radius:50%;margin-right:6px;object-fit:cover" onerror="this.style.display='none'">{{ user.nickname }}</span>
+            <img src="{{ user.avatar_url }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
+            <span>{{ user.nickname }}</span>
             <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ user.last_update or '' }}</span>
           </div>
           <div class="minicard-body">
