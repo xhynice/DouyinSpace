@@ -489,17 +489,17 @@ body {
 <!-- Stats -->
 <div class="stats-grid">
   <div class="stat-card">
-    <div class="stat-icon stat-icon-blue"><i class="fas fa-door-open"></i></div>
-    <div class="stat-info">
-      <div class="stat-value">{{ api_rooms|length if api_rooms else 0 }}</div>
-      <div class="stat-label">监控房间</div>
-    </div>
-  </div>
-  <div class="stat-card">
     <div class="stat-icon stat-icon-green"><i class="fas fa-circle"></i></div>
     <div class="stat-info">
       <div class="stat-value">{{ (api_status or {}).get('recording', 0) }}</div>
       <div class="stat-label">录制中</div>
+    </div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-icon stat-icon-blue"><i class="fas fa-door-open"></i></div>
+    <div class="stat-info">
+      <div class="stat-value">{{ api_rooms|length if api_rooms else 0 }}</div>
+      <div class="stat-label">采集直播</div>
     </div>
   </div>
   <div class="stat-card">
@@ -513,14 +513,14 @@ body {
     <div class="stat-icon stat-icon-blue"><i class="fas fa-hard-drive"></i></div>
     <div class="stat-info">
       <div class="stat-value">{{ "%.2f"|format(total_size / 1024) }}<span class="unit">GB</span></div>
-      <div class="stat-label">录制总大小</div>
+      <div class="stat-label">录制总量</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon stat-icon-red"><i class="fas fa-message"></i></div>
     <div class="stat-info">
       <div class="stat-value">{{ "%.2f"|format(total_barrage_count / 10000) }}<span class="unit">万</span></div>
-      <div class="stat-label">弹幕总数量</div>
+      <div class="stat-label">弹幕总量</div>
     </div>
   </div>
   <div class="stat-card">
@@ -541,7 +541,7 @@ body {
     <div class="stat-icon stat-icon-blue"><i class="fas fa-comments"></i></div>
     <div class="stat-info">
       <div class="stat-value">{{ comment_stats.comments + comment_stats.replies }}</div>
-      <div class="stat-label">总评论回复</div>
+      <div class="stat-label">总评论数量</div>
     </div>
   </div>
 </div>
@@ -561,7 +561,7 @@ body {
 
     <!-- Monitoring Rooms -->
     <div class="card">
-      <div class="card-title"><i class="fas fa-door-open"></i> 监控房间</div>
+      <div class="card-title"><i class="fas fa-door-open"></i> 采集直播</div>
       {% if api_rooms %}
       <div class="rooms-grid">
         {% for room in api_rooms %}
@@ -590,7 +590,7 @@ body {
         </div>
         {% endfor %}
       </div>
-      {% else %}<div class="empty-state">暂无监控房间</div>{% endif %}
+      {% else %}<div class="empty-state">暂无采集直播</div>{% endif %}
     </div>
 
     <!-- Recordings -->
