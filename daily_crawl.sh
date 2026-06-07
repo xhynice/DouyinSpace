@@ -36,7 +36,7 @@ log "=========================================="
 # 1. 采集数据到 DB(config.yaml 的 data_dir 决定写入位置)
 # ---------------------------------------------------------------------------
 log "[1/3] 采集数据..."
-if python main.py --all --limit 6 >> "$LOG_FILE" 2>&1; then
+if python main.py --all --limit 1 >> "$LOG_FILE" 2>&1; then
     log "[1/3] 采集完成"
 else
     log "[1/3] 采集失败,继续执行后续步骤"
