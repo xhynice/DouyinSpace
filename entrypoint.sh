@@ -16,6 +16,8 @@ if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/
     cp /tmp/space/DouyinBarrage/rooms.txt /app/DouyinBarrage/rooms.txt 2>/dev/null || true
     cp /tmp/space/DouyinComment/config.yaml /app/DouyinComment/config.yaml 2>/dev/null || true
     cp /tmp/space/app.py /app/app.py 2>/dev/null || true
+    cp /tmp/space/barrage_cache.py /app/barrage_cache.py 2>/dev/null || true
+    cp /tmp/space/generate_comment_cache.py /app/generate_comment_cache.py 2>/dev/null || true
     cp -r /tmp/space/templates /app/ 2>/dev/null || true
     cp /tmp/space/daily_crawl.sh /app/daily_crawl.sh 2>/dev/null || true
     cp -r /tmp/space/static /app/ 2>/dev/null || true
