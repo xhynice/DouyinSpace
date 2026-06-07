@@ -268,7 +268,7 @@ body {
 .minicard-body {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px 16px;
+  gap: 3px 10px;
   font-size: 12px;
 }
 .minicard-item {
@@ -627,8 +627,10 @@ body {
         {% for db in barrage_dbs %}
         <div class="minicard minicard-bg" style="background-image:url('{{ db.cover_url }}')">
           <div class="minicard-header">
+            <div style="display:flex;align-items:center;gap:6px">
             <img src="{{ db.avatar_url }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
             <span>{{ db.anchor }}</span>
+            </div>
             <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ db.modified }}</span>
           </div>
           <div class="minicard-body">
@@ -656,8 +658,10 @@ body {
         {% for user in comment_users %}
         <div class="minicard">
           <div class="minicard-header">
+            <div style="display:flex;align-items:center;gap:6px">
             <img src="{{ user.avatar_url }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">
             <span>{{ user.nickname }}</span>
+            </div>
             <span style="font-size:11px;color:#86909c;font-weight:400">更新 {{ user.last_update or '' }}</span>
           </div>
           <div class="minicard-body">
