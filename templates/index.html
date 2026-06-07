@@ -533,15 +533,15 @@ body {
   <div class="stat-card">
     <div class="stat-icon stat-icon-orange"><i class="fas fa-photo-film"></i></div>
     <div class="stat-info">
-      <div class="stat-value">{{ comment_stats.videos }}</div>
+      <div class="stat-value">{{ "%.2f"|format(comment_stats.videos / 10000) }}<span class="unit">万</span></div>
       <div class="stat-label">总作品数</div>
     </div>
   </div>
   <div class="stat-card">
     <div class="stat-icon stat-icon-blue"><i class="fas fa-comments"></i></div>
     <div class="stat-info">
-      <div class="stat-value">{{ comment_stats.comments + comment_stats.replies }}</div>
-      <div class="stat-label">总评论数量</div>
+      <div class="stat-value">{{ "%.2f"|format((comment_stats.comments + comment_stats.replies) / 10000) }}<span class="unit">万</span></div>
+      <div class="stat-label">总评论数</div>
     </div>
   </div>
 </div>
