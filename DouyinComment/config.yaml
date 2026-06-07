@@ -8,15 +8,15 @@ data_dir: /data2/DouyinComment/data
 # ==================== 用户配置 ====================
 # 支持多用户批量采集，每个用户数据独立存储
 users:
-  - enabled: false
+  - enabled: true
     sec_uid: "MS4wLjABAAAA2FYVN1jBWaTVasx7wXcsK0rCPfSYixt5-J1pUegQIbA"      # 用户 ID（从主页 URL 获取）
     nickname: "张全蛋。"                                                         # 用户昵称（用于日志显示，便于识别）
 
-  - enabled: false
+  - enabled: true
     sec_uid: "MS4wLjABAAAAWKIRK91nF8hLjuza0KVRL50-lcfNlEPHocsF9hNYzCUag7n4BgIHQaERsfq_NiHR"
     nickname: "才扁扁"
 
-  - enabled: false
+  - enabled: true
     sec_uid: "MS4wLjABAAAAcalmoSBh0fW1GKS97yeuGpQ83ebQ_0rdmY8M5I5xN_c"
     nickname: "张君雅1v4⁸⁰⁰⁸"
 
