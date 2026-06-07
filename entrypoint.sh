@@ -18,6 +18,7 @@ if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/
     cp /tmp/space/app.py /app/app.py 2>/dev/null || true
     cp -r /tmp/space/templates /app/ 2>/dev/null || true
     cp /tmp/space/daily_crawl.sh /app/daily_crawl.sh 2>/dev/null || true
+    cp -r /tmp/space/static /app/ 2>/dev/null || true
     # 更新自身并重新执行
     if ! cmp -s /tmp/space/entrypoint.sh /app/entrypoint.sh 2>/dev/null; then
         cp /tmp/space/entrypoint.sh /app/entrypoint.sh
