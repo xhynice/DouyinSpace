@@ -635,7 +635,7 @@ body {
           <div class="minicard-body">
             <div class="minicard-item">
               <span class="lbl">弹幕数</span>
-              <span class="val" style="color:#1677ff">{{ db.msg_count }}</span>
+              <span class="val" style="color:#1677ff">{{ "%.2f"|format(db.msg_count / 10000) }}万</span>
             </div>
             <div class="minicard-item">
               <span class="lbl">大小</span>
@@ -668,15 +668,15 @@ body {
             </div>
             <div class="minicard-item">
               <span class="lbl">评论</span>
-              <span class="val" style="color:#1677ff">{{ user.comments }}</span>
+              <span class="val" style="color:#1677ff">{{ "%.2f"|format(user.comments / 10000) }}万</span>
             </div>
             <div class="minicard-item">
               <span class="lbl">回复</span>
-              <span class="val" style="color:#1677ff">{{ user.replies }}</span>
+              <span class="val" style="color:#1677ff">{{ "%.2f"|format(user.replies / 10000) }}万</span>
             </div>
             <div class="minicard-item">
               <span class="lbl">媒体</span>
-              <span class="val" style="color:#00b42a">{{ user.media_downloaded }}</span>
+              <span class="val" style="color:#00b42a">{{ "%.2f"|format(user.media_downloaded / 10000) }}万</span>
             </div>
           </div>
         </div>
