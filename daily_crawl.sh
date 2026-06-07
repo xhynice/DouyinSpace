@@ -36,7 +36,7 @@ log "=========================================="
 # 1. 采集数据到 DB(config.yaml 的 data_dir 决定写入位置)
 # ---------------------------------------------------------------------------
 log "[1/6] 采集数据..."
-if python main.py --all --limit 1 >> "$LOG_FILE" 2>&1; then
+if python3 main.py --all --limit 1 >> "$LOG_FILE" 2>&1; then
     log "[1/6] 采集完成"
 else
     log "[1/6] 采集失败,继续执行后续步骤"
@@ -46,7 +46,7 @@ fi
 # 2. 直接模式迁移(用 DB 原始 URL,可能过期)
 # ---------------------------------------------------------------------------
 log "[2/6] 直接模式迁移..."
-if python scripts/migrate_to_bucket.py --data-dir "$WORK_DIR/data" --direct --author all >> "$LOG_FILE" 2>&1; then
+if python3 scripts/migrate_to_bucket.py --data-dir "$WORK_DIR/data" --direct --author all >> "$LOG_FILE" 2>&1; then
     log "[2/6] 直接模式完成"
 else
     log "[2/6] 直接模式失败,继续执行后续步骤"
@@ -56,7 +56,7 @@ fi
 # 3. API 模式迁移(重新签名 URL,补第 2 步漏的过期 URL)
 # ---------------------------------------------------------------------------
 log "[3/6] API 模式迁移..."
-if python scripts/migrate_to_bucket.py --data-dir "$WORK_DIR/data" --author all >> "$LOG_FILE" 2>&1; then
+if python3 scripts/migrate_to_bucket.py --data-dir "$WORK_DIR/data" --author all >> "$LOG_FILE" 2>&1; then
     log "[3/6] API 模式完成"
 else
     log "[3/6] API 模式失败"
@@ -71,7 +71,7 @@ log "=========================================="
 # ---------------------------------------------------------------------------
 log "[4/6] 构建弹幕前端数据..."
 cd /app/DouyinBarrage
-if python docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
+if python3 docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
     log "[4/6] 弹幕前端构建完成"
 else
     log "[4/6] 弹幕前端构建失败"
@@ -79,7 +79,7 @@ fi
 
 log "[5/6] 构建评论前端数据..."
 cd /app/DouyinComment
-if python scripts/build_comment.py --sqlite --cdn "https://huggingface.co/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
+if python3 scripts/build_comment.py --sqlite --cdn "https://huggingface.co/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
     log "[5/6] 评论前端构建完成"
 else
     log "[5/6] 评论前端构建失败"
@@ -90,7 +90,7 @@ fi
 # ---------------------------------------------------------------------------
 log "[6/6] 生成评论统计缓存..."
 cd /app
-if python /app/generate_comment_cache.py >> "$LOG_FILE" 2>&1; then
+if python3 /app/generate_comment_cache.py >> "$LOG_FILE" 2>&1; then
     log "[6/6] 评论统计缓存已生成"
 else
     log "[6/6] 评论统计缓存生成失败"
