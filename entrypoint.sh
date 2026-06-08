@@ -2,12 +2,28 @@
 echo "=== 抖音弹幕采集 HF Space ==="
 mkdir -p /data/barrage /data/logs
 
-# 1. 拉取最新代码
+# ── 拉取代码并显示版本信息 ──
+pull_repo() {
+    local name="$1" dir="$2"
+    local before after
+    before=$(git -C "$dir" log --oneline -1 2>/dev/null || echo "未知")
+    if git -C "$dir" pull origin main 2>&1; then
+        after=$(git -C "$dir" log --oneline -1 2>/dev/null || echo "未知")
+        if [ "$before" = "$after" ]; then
+            echo "  → 已是最新: $after"
+        else
+            echo "  → 已更新: $after"
+        fi
+    else
+        echo "  → 拉取失败，使用现有代码: $before"
+    fi
+}
+
 echo "[1/6] 拉取弹幕采集最新代码..."
-cd /app/DouyinBarrage && git pull origin main || echo "[1/6] 弹幕采集拉取失败，使用现有代码"
+pull_repo "弹幕" /app/DouyinBarrage
 
 echo "[2/6] 拉取评论采集最新代码..."
-cd /app/DouyinComment && git pull origin main || echo "[2/6] 评论采集拉取失败，使用现有代码"
+pull_repo "评论" /app/DouyinComment
 
 # 2. 拉取最新 DouyinSpace 配置
 echo "[3/6] 拉取最新配置文件..."
