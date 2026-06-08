@@ -28,6 +28,7 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 .header-actions{display:flex;align-items:center;gap:6px}
 .header-actions .icon-btn{width:26px;height:26px;display:flex;align-items:center;justify-content:center;border-radius:4px;cursor:pointer;color:var(--muted);font-size:15px}
 .header-actions .icon-btn:hover{background:#f5f7fa;color:var(--blue)}
+.header-actions .icon-btn.active{background:#e8f3ff;color:var(--blue)}
 .header-actions .meta{font-size:11px;color:var(--muted)}
 .header-actions label{display:flex;align-items:center;gap:3px;cursor:pointer;font-size:11px}
 .header-actions input{margin:0}
@@ -383,11 +384,17 @@ function bindEvents() {
 
 // ── 搜索切换 ──
 function toggleSearch() {
-  document.getElementById('searchRow').classList.toggle('show');
+  const row = document.getElementById('searchRow');
+  row.classList.toggle('show');
+  // 按钮状态同步
+  document.querySelector('[title="搜索"]').classList.toggle('active', row.classList.contains('show'));
 }
 
 function toggleTypes() {
-  document.getElementById('typeFilter').classList.toggle('show');
+  const el = document.getElementById('typeFilter');
+  el.classList.toggle('show');
+  // 按钮状态同步
+  document.querySelector('[title="类型筛选"]').classList.toggle('active', el.classList.contains('show'));
 }
 
 function clearSearch() {
