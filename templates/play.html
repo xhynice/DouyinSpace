@@ -34,7 +34,7 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 
 /* 弹幕列表 */
 .barrage-list{flex:1;overflow-y:auto;padding:4px 0}
-.barrage-item{padding:5px 12px;cursor:pointer;line-height:1.5;display:flex;align-items:baseline;gap:5px}
+.barrage-item{padding:5px 12px;cursor:pointer;line-height:1.5;display:flex;align-items:flex-start;gap:5px}
 .barrage-item:hover{background:#f5f7fa}
 .barrage-item.active{background:#e8f3ff}
 .barrage-item .user{color:#ff6a00;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;line-height:1.4}
@@ -286,8 +286,12 @@ async function init() {
   await loadBarrage(0);
   // 列表没填满视口且还有更多 → 自动继续加载（防止不足2000条时滚到底部）
   const list = document.getElementById('barrageList');
-  while (hasMore && list.scrollHeight <= list.clientHeight) {
+  let loadAttempts = 0;
+  while (hasMore && list.scrollHeight <= list.clientHeight && loadAttempts < 10) {
+    const prevCount = allBarrage.length;
     await loadBarrage(lastCursor);
+    if (allBarrage.length === prevCount) break;  // 加载失败或无新数据，退出
+    loadAttempts++;
   }
   // 初始加载完成后，延迟解锁滚动事件，确保渲染和滚动位置稳定
   setTimeout(() => { initialLoading = false; }, 500);
