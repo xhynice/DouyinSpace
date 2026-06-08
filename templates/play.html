@@ -347,6 +347,8 @@ function bindEvents() {
       document.querySelectorAll('#searchMenu .dropdown-item').forEach(item => {
         item.classList.toggle('active', item.dataset.value === 'user');
       });
+      // 自动显示搜索框
+      document.getElementById('searchRow').classList.add('show');
       applyFilter();
       return;
     }
