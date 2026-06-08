@@ -35,11 +35,12 @@ log() {
     echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" | tee -a "$LOG_FILE"
 }
 
-# === DB 修复函数：清理残留 WAL + 完整性检测 ===
+# === DB 修复函数：清理残留 WAL + 完整性检测 + 碎片压缩 ===
 repair_dbs() {
     log "[修复] 检查 DB 完整性..."
     local repaired=0
     local failed=0
+    local vacuumed=0
 
     for db in "$DATA_DIR"/*/sqlite.db; do
         [ -f "$db" ] || continue
@@ -89,9 +90,35 @@ except Exception as e:
             log "[修复] ✗ $name 损坏: $result"
             failed=$((failed + 1))
         fi
+
+        # 3. 碎片压缩：freelist > 30% 页面时自动 VACUUM
+        local vacuum_result
+        vacuum_result=$(python3 -c "
+import sqlite3
+try:
+    conn = sqlite3.connect('$db')
+    pages = conn.execute('PRAGMA page_count').fetchone()[0]
+    freelist = conn.execute('PRAGMA freelist_count').fetchone()[0]
+    if pages > 0 and freelist / pages >= 0.3:
+        conn.execute('PRAGMA vacuum')
+        conn.close()
+        print(f'vacuumed: {freelist}/{pages} pages')
+    else:
+        conn.close()
+        print('ok')
+except Exception as e:
+    print(f'fail: {e}')
+" 2>&1)
+
+        if echo "$vacuum_result" | grep -q "vacuumed"; then
+            log "[修复] $name $vacuum_result"
+            vacuumed=$((vacuumed + 1))
+        elif echo "$vacuum_result" | grep -q "fail"; then
+            log "[修复] $name VACUUM 失败: $vacuum_result"
+        fi
     done
 
-    log "[修复] 完成: 修复 $repaired 个, 损坏 $failed 个"
+    log "[修复] 完成: 修复 $repaired 个, 损坏 $failed 个, 压缩 $vacuumed 个"
     return $failed
 }
 
