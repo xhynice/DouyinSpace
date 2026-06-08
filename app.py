@@ -223,20 +223,37 @@ def _open_db_conn(db_path):
     return conn
 
 def _get_db_conn(db_path):
-    """获取只读数据库连接（复用 + 健康检查）。"""
+    """获取只读数据库连接（复用 + mtime 检查 + 健康检查）。"""
+    try:
+        current_mtime = os.path.getmtime(db_path)
+    except OSError:
+        current_mtime = 0
     if db_path in _db_connections:
         entry = _db_connections[db_path]
-        try:
-            entry["conn"].execute("SELECT 1")
-            entry["ts"] = time.time()
-            return entry["conn"]
-        except Exception:
-            logger.warning(f"[DB] 连接失效，重建: {db_path}")
+        # 文件更新过 → 关闭旧连接，重建，清弹幕缓存
+        if entry.get("mtime") != current_mtime:
             try:
                 entry["conn"].close()
             except Exception:
                 pass
             del _db_connections[db_path]
+            # 清除该 db 的弹幕查询缓存
+            stale_keys = [k for k in _barrage_cache if k[0] == db_path]
+            for k in stale_keys:
+                del _barrage_cache[k]
+            _table_cache.pop(db_path, None)
+        else:
+            try:
+                entry["conn"].execute("SELECT 1")
+                entry["ts"] = time.time()
+                return entry["conn"]
+            except Exception:
+                logger.warning(f"[DB] 连接失效，重建: {db_path}")
+                try:
+                    entry["conn"].close()
+                except Exception:
+                    pass
+                del _db_connections[db_path]
     if len(_db_connections) >= DB_CONN_MAX:
         oldest_key = min(_db_connections, key=lambda k: _db_connections[k]["ts"])
         try:
@@ -245,7 +262,7 @@ def _get_db_conn(db_path):
             pass
         del _db_connections[oldest_key]
     conn = _open_db_conn(db_path)
-    _db_connections[db_path] = {"conn": conn, "ts": time.time()}
+    _db_connections[db_path] = {"conn": conn, "ts": time.time(), "mtime": current_mtime}
     return conn
 
 def _get_existing_tables(db_path):
