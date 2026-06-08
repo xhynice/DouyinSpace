@@ -25,8 +25,8 @@ pull_repo "弹幕" /app/DouyinBarrage
 echo "[2/6] 拉取评论采集最新代码..."
 pull_repo "评论" /app/DouyinComment
 
-# 2. 拉取最新 DouyinSpace 配置
-echo "[3/6] 拉取最新配置文件..."
+# 3. 拉取 DouyinSpace 最新代码
+echo "[3/6] 拉取 DouyinSpace 最新代码..."
 if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/dev/null; then
     cp /tmp/space/DouyinBarrage/config.yaml /app/DouyinBarrage/config.yaml 2>/dev/null || true
     cp /tmp/space/DouyinBarrage/rooms.txt /app/DouyinBarrage/rooms.txt 2>/dev/null || true
@@ -41,16 +41,16 @@ if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/
         cp /tmp/space/entrypoint.sh /app/entrypoint.sh
         chmod +x /app/entrypoint.sh
         rm -rf /tmp/space
-        echo "[3/6] entrypoint.sh 已更新，重新执行..."
+        echo "  → entrypoint.sh 已更新，重新执行..."
         exec /bin/bash /app/entrypoint.sh
     fi
     rm -rf /tmp/space
-    echo "[3/6] 配置文件已更新"
+    echo "  → DouyinSpace 代码已更新"
 else
-    echo "[3/6] 配置拉取失败，使用现有配置"
+    echo "[3/6] 拉取失败，使用现有代码"
 fi
 
-# 3. 每天凌晨 5:30 运行评论采集（cron 环境极简，需显式传入 PATH 和 HF_TOKEN）
+# 4. 配置定时任务（cron 环境极简，需显式传入 PATH 和 HF_TOKEN）
 echo "[4/6] 配置定时任务..."
 cat <<EOF | crontab -
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
@@ -59,12 +59,11 @@ HF_TOKEN=$HF_TOKEN
 EOF
 echo "[4/6] 定时任务已配置"
 
-# 4. 注入 Cookie
+# 5. 注入 Cookie
 if [ -n "$DOUYIN_COOKIE" ]; then
     echo "$DOUYIN_COOKIE" > /app/DouyinBarrage/cookie.txt
-    echo "[5/6] 弹幕采集 Cookie 已注入"
     echo "$DOUYIN_COOKIE" > /app/DouyinComment/cookie.txt
-    echo "[5/6] 评论采集 Cookie 已注入"
+    echo "[5/6] Cookie 已注入（弹幕+评论）"
 else
     echo "[5/6] 未设置 DOUYIN_COOKIE，跳过注入"
 fi
@@ -75,7 +74,7 @@ if [ -z "$DUFS_PASSWORD" ]; then
     exit 1
 fi
 
-# 5. 启动服务
+# 6. 启动服务
 echo "[6/6] 启动 supervisord..."
 
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf
