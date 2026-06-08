@@ -52,18 +52,11 @@ fi
 
 # 3. 每天凌晨 3 点运行评论采集
 echo "[4/6] 配置定时任务..."
-echo "0 3 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1" | crontab -
+cat <<'CRONTAB' | crontab -
+PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+30 5 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1
+CRONTAB
 echo "[4/6] 定时任务已配置"
-
-# ── 调试: 输出 cron 相关路径信息 ──
-echo "=== [调试] 环境信息 ==="
-echo "PATH=$PATH"
-echo "which python3: $(which python3 2>/dev/null || echo '未找到')"
-echo "python3 --version: $(python3 --version 2>&1 || echo '无法执行')"
-echo "httpx location: $(python3 -c 'import httpx; print(httpx.__file__)' 2>&1 || echo 'import 失败')"
-echo "=== [调试] cron 环境模拟 ==="
-env -i HOME=/root PATH=/usr/bin:/bin SHELL=/bin/bash sh -c 'echo "cron PATH=$PATH"; echo "cron which python3=$(which python3 2>/dev/null || echo 未找到)"; python3 -c "import httpx; print(\"httpx OK\")" 2>&1 || echo "cron import httpx 失败"'
-echo "=== [调试] 结束 ==="
 
 # 4. 注入 Cookie
 if [ -n "$DOUYIN_COOKIE" ]; then
