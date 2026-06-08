@@ -572,9 +572,13 @@ function renderList() {
   
   if (!userScrolling && document.getElementById('autoScroll').checked) {
     if (wasEmpty) {
-      // 初始加载：滚到当前视频时间对应的弹幕位置
+      // 初始加载：有 active 弹幕则跟随，否则滚到顶部
       const activeEl = list.querySelector('.barrage-item.active');
-      if (activeEl) activeEl.scrollIntoView({ block: 'center' });
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'center' });
+      } else {
+        list.scrollTop = 0;
+      }
     } else if (wasAtBottom) {
       list.scrollTop = list.scrollHeight;
     } else {
