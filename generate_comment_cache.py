@@ -86,12 +86,9 @@ def main():
         sec_uid = u.get("sec_uid", "")
         nickname = u.get("nickname", "未知")
         user_db = os.path.join(comment_dir, sec_uid, "sqlite.db")
-        avatar_url = f"https://huggingface.co/buckets/sunset139/douyin/resolve/DouyinComment/data/{sec_uid}/avatar.jpg"
-
         user_entry = {
             "sec_uid": sec_uid,
             "nickname": nickname,
-            "avatar_url": avatar_url,
             "videos": 0,
             "comments": 0,
             "replies": 0,

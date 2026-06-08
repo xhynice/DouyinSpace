@@ -74,7 +74,4 @@ fi
 # 5. 启动服务
 echo "[6/6] 启动 supervisord..."
 
-# 临时：启动后立即运行一次 daily_crawl.sh（测试用）
-nohup /bin/bash /app/daily_crawl.sh >> /data/logs/startup_crawl.log 2>&1 &
-
 exec /usr/bin/supervisord -c /etc/supervisor/conf.d/supervisord.conf

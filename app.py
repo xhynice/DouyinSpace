@@ -53,8 +53,9 @@ RECORDING_DIR = "/data/barrage"
 HF_USER = os.environ.get("HF_USER", "sunset139")
 HF_BUCKET = os.environ.get("HF_BUCKET", "Douyin-storage")
 BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
-# 本地 nginx 代理路径（桶直接挂载，避免 CDN 请求）
-LOCAL_BARRAGE_BASE = "/douyin-storage/barrage"
+CDN_BARRAGE = BUCKETS_BASE  # Douyin-storage 桶 CDN
+CDN_COMMENT = f"https://huggingface.co/buckets/{HF_USER}/douyin/resolve"  # douyin 桶 CDN
+_VIDEO_EXT = {".ts", ".mp4", ".mkv", ".flv"}
 LOCAL_COMMENT_BASE = "/douyin/DouyinComment/data"
 
 # ── DouyinComment ──
@@ -93,13 +94,20 @@ def _load_emoji():
 # ══════════════════════════════════════
 
 def buckets_url(local_path):
-    """生成资源 URL：优先本地 nginx 代理，回退 CDN"""
-    # 弹幕资源 → /data（Douyin-storage 桶）
+    """生成资源 URL：视频走 CDN 直连，小文件走 nginx 代理"""
+    is_video = os.path.splitext(local_path)[1].lower() in _VIDEO_EXT
+    # /data/ → Douyin-storage 桶
     if local_path.startswith("/data/"):
-        return "/douyin-storage/" + local_path[6:]  # 去掉 /data/ 前缀
-    # 评论资源 → /data2（douyin 桶）
+        rel = local_path[6:]  # 去掉 /data/ 前缀
+        if is_video:
+            return CDN_BARRAGE + "/" + quote(rel, safe="/") + "?download=true"
+        return "/douyin-storage/" + rel
+    # /data2/ → douyin 桶
     if local_path.startswith("/data2/"):
-        return "/douyin/" + local_path[7:]  # 去掉 /data2/ 前缀
+        rel = local_path[7:]  # 去掉 /data2/ 前缀
+        if is_video:
+            return CDN_COMMENT + "/" + quote(rel, safe="/") + "?download=true"
+        return "/douyin/" + rel
     # 其他 → CDN（兜底）
     rel = local_path.replace("/data/", "", 1)
     return BUCKETS_BASE + "/" + quote(rel, safe="/") + "?download=true"
@@ -296,8 +304,8 @@ def _stat_barrage_db(path, name):
         "size_mb": round(s.st_size / 1048576, 2),
         "modified": datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M"),
         "msg_count": msg_count,
-        "avatar_url": f"{LOCAL_BARRAGE_BASE}/{quote(anchor, safe='/')}/avatar.jpg",
-        "cover_url": f"{LOCAL_BARRAGE_BASE}/{quote(anchor, safe='/')}/cover.jpg",
+        "avatar_url": f"/douyin-storage/barrage/{quote(anchor, safe='/')}/avatar.jpg",
+        "cover_url": f"/douyin-storage/barrage/{quote(anchor, safe='/')}/cover.jpg",
     }
 
 def get_barrage_dbs():
@@ -405,6 +413,8 @@ def get_comment_users():
         if _comment_users_cache["data"] and _comment_users_cache["mtime"] == cache_mtime and now - _comment_users_cache["ts"] < COMMENT_CACHE_TTL:
             return _comment_users_cache["data"]
         users = cache_data.get("users", [])
+        for u in users:
+            u["avatar_url"] = f"{LOCAL_COMMENT_BASE}/{u.get('sec_uid', '')}/avatar.jpg"
         _comment_users_cache["data"] = users
         _comment_users_cache["ts"] = now
         _comment_users_cache["mtime"] = cache_mtime
