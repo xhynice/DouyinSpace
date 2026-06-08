@@ -538,8 +538,8 @@ def get_anchor_files(video_path, recordings=None):
     return all_files
 
 
-def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None):
-    cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None)
+def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None, user=None):
+    cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None, user)
     now = time.time()
     try:
         db_mtime = os.path.getmtime(db_path)
@@ -558,6 +558,8 @@ def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc"
         conds.append("time >= ?"); params.append(int(cursor))
     elif cursor and sort == "desc":
         conds.append("time <= ?"); params.append(int(cursor))
+    if user:
+        conds.append("user_name = ?"); params.append(user)
     where = " AND ".join(conds) if conds else "1=1"
 
     ALL_QUERIES = {
@@ -709,9 +711,10 @@ def api_barrage():
     sort = request.args.get("sort", "asc")
     types_str = request.args.get("types", "")
     types = set(types_str.split(",")) if types_str else None
+    user = request.args.get("user", "").strip() or None
     if not db or not os.path.exists(db):
         return jsonify({"error": "not found", "barrage": []})
-    results = query_barrage(db, t_from, t_to, limit=limit, cursor=cursor, sort=sort, types=types)
+    results = query_barrage(db, t_from, t_to, limit=limit, cursor=cursor, sort=sort, types=types, user=user)
     for r in results:
         r["offset"] = max(0, r["time"] - t_from) if t_from else 0
     next_cursor = results[-1]["time"] if results else cursor
