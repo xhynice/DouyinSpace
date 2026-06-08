@@ -40,7 +40,7 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 .barrage-item.active{background:#e8f3ff}
 .barrage-item .user{color:#ff6a00;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;line-height:1.4}
 .barrage-item .user:hover{text-decoration:underline}
-.barrage-item .user-info{float:left;display:flex;align-items:baseline;gap:3px;flex-shrink:0;line-height:1.4;margin-right:5px}
+.barrage-item .user-info{float:left;display:flex;align-items:center;gap:3px;flex-shrink:0;line-height:1.4;margin-right:5px}
 .barrage-item .grade{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600}
 .barrage-item .content{font-size:12px;word-break:break-word;line-height:1.4;overflow:hidden}
 .barrage-item .fans{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600;min-width:20px;text-align:center}
@@ -388,16 +388,26 @@ function bindEvents() {
 // ── 搜索切换 ──
 function toggleSearch() {
   const row = document.getElementById('searchRow');
-  row.classList.toggle('show');
-  // 按钮状态同步
-  document.querySelector('[title="搜索"]').classList.toggle('active', row.classList.contains('show'));
+  const btn = document.querySelector('[title="搜索"]');
+  if (row.classList.contains('show')) {
+    row.classList.remove('show');
+    btn.classList.remove('active');
+  } else {
+    row.classList.add('show');
+    btn.classList.add('active');
+  }
 }
 
 function toggleTypes() {
   const el = document.getElementById('typeFilter');
-  el.classList.toggle('show');
-  // 按钮状态同步
-  document.querySelector('[title="类型筛选"]').classList.toggle('active', el.classList.contains('show'));
+  const btn = document.querySelector('[title="类型筛选"]');
+  if (el.classList.contains('show')) {
+    el.classList.remove('show');
+    btn.classList.remove('active');
+  } else {
+    el.classList.add('show');
+    btn.classList.add('active');
+  }
 }
 
 function clearSearch() {
