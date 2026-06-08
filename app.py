@@ -16,6 +16,7 @@ import os
 import re
 import sqlite3
 import time
+import collections
 import ast
 import urllib.request
 import urllib.error
@@ -67,6 +68,29 @@ _comment_users_cache = {"data": None, "ts": 0, "mtime": 0}
 BARRAGE_CACHE_TTL = 1200  # mtime不变时20分钟有效
 _barrage_cache = {}  # key -> {"data": [...], "ts": float, "mtime": float}
 BARRAGE_CACHE_MAX = 50  # 最多缓存50个查询
+
+# ── 请求限流 ──
+_rate_limits = {}  # ip -> deque of timestamps
+RATE_LIMIT = 30  # 每分钟最多30次请求
+RATE_WINDOW = 60  # 滑动窗口60秒
+
+def _check_rate_limit(ip):
+    """简单内存滑动窗口限流。"""
+    now = time.time()
+    if ip not in _rate_limits:
+        _rate_limits[ip] = collections.deque()
+    dq = _rate_limits[ip]
+    while dq and dq[0] < now - RATE_WINDOW:
+        dq.popleft()
+    if len(dq) >= RATE_LIMIT:
+        return False
+    dq.append(now)
+    # 清理过期 IP（防止内存泄漏）
+    if len(_rate_limits) > 500:
+        for k in list(_rate_limits):
+            if not _rate_limits[k] or _rate_limits[k][-1] < now - RATE_WINDOW * 2:
+                del _rate_limits[k]
+    return True
 
 # ── 弹幕进程 API ──
 BARRAGE_API = os.environ.get("BARRAGE_API", "http://127.0.0.1:8088")
@@ -197,8 +221,10 @@ def get_recordings():
 DB_EXT = {'.db'}
 _table_cache = {}  # key -> {"tables": set, "ts": float}
 _db_connections = {}  # 复用连接
+_count_cache = {}  # db_path -> {"count": int, "ts": float}
 DB_CONN_MAX = 10  # 最多缓存10个连接
 TABLE_CACHE_TTL = 600  # 表结构缓存 10 分钟过期
+COUNT_CACHE_TTL = 600  # 消息数缓存 10 分钟
 
 def _open_db_conn(db_path):
     """打开一个新的只读数据库连接，FUSE 兼容。"""
@@ -242,6 +268,7 @@ def _get_db_conn(db_path):
             for k in stale_keys:
                 del _barrage_cache[k]
             _table_cache.pop(db_path, None)
+            _count_cache.pop(db_path, None)
         else:
             try:
                 entry["conn"].execute("SELECT 1")
@@ -290,26 +317,33 @@ def _stat_barrage_db(path, name):
     s = os.stat(path)
     anchor = os.path.basename(os.path.dirname(path))
     msg_count = 0
-    existing = _get_existing_tables(path)
-    if existing:
-        for attempt in range(2):
-            try:
-                conn = _get_db_conn(path)
-                for tbl in ("chat", "gift", "like", "social", "lucky_bag"):
-                    if tbl in existing:
-                        try:
-                            row = conn.execute(f"SELECT MAX(rowid) FROM [{tbl}]").fetchone()
-                            if row and row[0]:
-                                msg_count += row[0]
-                        except Exception as e:
-                            logger.debug(f"[DB] 查询 {tbl} 失败: {e}")
-                break
-            except Exception as e:
-                logger.warning(f"[DB] 读取弹幕DB失败 ({path}, 第{attempt+1}次): {e}")
-                # 首次失败，清除连接和表缓存后重试
-                if attempt == 0:
-                    _db_connections.pop(path, None)
-                    _table_cache.pop(path, None)
+    now = time.time()
+    # 优先用缓存的消息数
+    if path in _count_cache and now - _count_cache[path]["ts"] < COUNT_CACHE_TTL:
+        msg_count = _count_cache[path]["count"]
+    else:
+        existing = _get_existing_tables(path)
+        if existing:
+            for attempt in range(2):
+                try:
+                    conn = _get_db_conn(path)
+                    total = 0
+                    for tbl in ("chat", "gift", "like", "social", "lucky_bag"):
+                        if tbl in existing:
+                            try:
+                                row = conn.execute(f"SELECT COUNT(*) FROM [{tbl}]").fetchone()
+                                if row and row[0]:
+                                    total += row[0]
+                            except Exception as e:
+                                logger.debug(f"[DB] COUNT {tbl} 失败: {e}")
+                    msg_count = total
+                    _count_cache[path] = {"count": total, "ts": now}
+                    break
+                except Exception as e:
+                    logger.warning(f"[DB] 读取弹幕DB失败 ({path}, 第{attempt+1}次): {e}")
+                    if attempt == 0:
+                        _db_connections.pop(path, None)
+                        _table_cache.pop(path, None)
     return {
         "anchor": anchor, "path": path,
         "size_mb": round(s.st_size / 1048576, 2),
@@ -493,12 +527,18 @@ def _get_comment_users_from_db():
 def _count_downloaded_media(conn):
     """统计已下载资源数量（md5 文件名 = 已下载，URL = 未下载）。"""
     downloaded = 0
-    # 单值字段
-    for row in conn.execute("SELECT thumb, video FROM videos"):
-        for field in row:
-            if field and field.strip() and not field.strip().startswith("http"):
-                downloaded += 1
-    # 数组字段：videos.images, comments.image_list, replies.image_list, comments.sticker, replies.sticker
+    # 单值字段：用 WHERE 过滤空值
+    for sql in [
+        "SELECT thumb FROM videos WHERE thumb IS NOT NULL AND thumb != '' AND thumb NOT LIKE 'http%'",
+        "SELECT video FROM videos WHERE video IS NOT NULL AND video != '' AND video NOT LIKE 'http%'",
+    ]:
+        try:
+            row = conn.execute(f"SELECT COUNT(*) FROM ({sql})").fetchone()
+            if row:
+                downloaded += row[0]
+        except Exception:
+            pass
+    # 数组字段
     for sql in [
         "SELECT images FROM videos WHERE images IS NOT NULL AND images != ''",
         "SELECT image_list FROM comments WHERE image_list IS NOT NULL AND image_list != ''",
@@ -506,14 +546,16 @@ def _count_downloaded_media(conn):
     ]:
         for row in conn.execute(sql):
             downloaded += _count_in_field(row[0])
-    # 单值字段：avatar、sticker
+    # avatar + sticker
     for sql in [
-        "SELECT user_avatar, sticker FROM comments",
-        "SELECT user_avatar, sticker FROM replies",
+        "SELECT user_avatar, sticker FROM comments WHERE (user_avatar IS NOT NULL AND user_avatar != '') OR (sticker IS NOT NULL AND sticker != '')",
+        "SELECT user_avatar, sticker FROM replies WHERE (user_avatar IS NOT NULL AND user_avatar != '') OR (sticker IS NOT NULL AND sticker != '')",
     ]:
         for row in conn.execute(sql):
             for field in row:
-                if field and field.strip() and not field.strip().startswith("http"):
+                if field and field.strip():
+                    if field.strip().startswith("http"):
+                        continue
                     if field.strip().startswith("["):
                         downloaded += _count_in_field(field)
                     else:
@@ -556,6 +598,10 @@ def get_anchor_files(video_path, recordings=None):
 
 
 def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None, user=None):
+    # 安全检查：必须有时间范围，防止全表扫描
+    if not t_from and not t_to and not cursor:
+        logger.warning(f"[弹幕] 查询缺少时间范围，拒绝全表扫描: {db_path}")
+        return []
     cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None, user)
     now = time.time()
     try:
@@ -720,6 +766,8 @@ def play_page(filepath):
 
 @app.route("/api/barrage")
 def api_barrage():
+    if not _check_rate_limit(request.remote_addr or "unknown"):
+        return jsonify({"error": "rate limited", "barrage": []}), 429
     db = request.args.get("db_path", "")
     t_from = request.args.get("time_from", type=int)
     t_to = request.args.get("time_to", type=int)
@@ -740,11 +788,15 @@ def api_barrage():
 
 @app.route("/api/recordings")
 def api_recordings():
+    if not _check_rate_limit(request.remote_addr or "unknown"):
+        return jsonify({"error": "rate limited"}), 429
     return jsonify({"files": get_recordings()})
 
 
 @app.route("/api/barrage-dbs")
 def api_barrage_dbs():
+    if not _check_rate_limit(request.remote_addr or "unknown"):
+        return jsonify({"error": "rate limited"}), 429
     dbs = [{k: v for k, v in d.items() if not k.startswith("_")} for d in get_barrage_dbs()]
     return jsonify({"dbs": dbs})
 
