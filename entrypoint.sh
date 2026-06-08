@@ -55,7 +55,7 @@ echo "[4/6] 配置定时任务..."
 cat <<EOF | crontab -
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 HF_TOKEN=$HF_TOKEN
-30 5 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1
+0 6 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1
 EOF
 echo "[4/6] 定时任务已配置"
 
