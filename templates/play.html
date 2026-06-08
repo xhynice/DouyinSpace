@@ -71,13 +71,14 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 .barrage-item .content img{width:16px;height:16px;vertical-align:middle;margin:0 1px}
 
 /* 筛选栏 */
-.barrage-filter{padding:8px 12px;border-top:1px solid var(--border);background:#fafafa;flex-shrink:0;position:relative}
+.barrage-filter{padding:0 12px;border-top:none;background:#fafafa;flex-shrink:0;position:relative}
+.barrage-filter:has(.search-row.show,.type-filter.show){padding:8px 12px;border-top:1px solid var(--border)}
 .search-row{display:none;gap:6px;align-items:center}
 .search-row.show{display:flex}
 .search-row .dropdown{position:relative}
 .search-row .dropdown-btn{height:28px;padding:0 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;background:#fff;cursor:pointer;display:flex;align-items:center;gap:4px}
 .search-row .dropdown-btn:hover{background:#f5f7fa}
-.search-row .dropdown-menu{display:none;position:absolute;bottom:100%;left:0;background:#fff;border:1px solid var(--border);border-radius:4px 4px 0 0;z-index:20;min-width:80px;box-shadow:0 -2px 8px rgba(0,0,0,.1)}
+.search-row .dropdown-menu{display:none;position:absolute;bottom:100%;left:0;background:#fff;border:1px solid var(--border);border-radius:4px 4px 0 0;z-index:20;width:100%;box-shadow:0 -2px 8px rgba(0,0,0,.1)}
 .search-row .dropdown-menu.show{display:block}
 .search-row .dropdown-item{padding:6px 12px;font-size:12px;cursor:pointer}
 .search-row .dropdown-item:hover{background:#f5f7fa}
@@ -133,14 +134,16 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
   .header-actions .icon-btn{width:24px;height:24px;font-size:14px}
   .header-actions label{font-size:10px}
   .header-actions .meta{font-size:10px}
-  .barrage-filter{padding:6px 10px}
+  .barrage-filter{padding:0 10px}
+  .barrage-filter:has(.search-row.show,.type-filter.show){padding:6px 10px}
   .type-filter .type-btn{padding:2px 6px;font-size:10px}
   .barrage-item{padding:5px 10px}
   .barrage-item .user{font-size:12px}
   .barrage-item .content{font-size:12px}
   .barrage-item .grade,.barrage-item .fans{font-size:10px;padding:1px 3px}
   /* 移动端筛选栏悬浮底部 */
-  .barrage-filter{position:fixed;bottom:0;left:0;right:0;z-index:10;background:#fff;border-top:1px solid var(--border)}
+  .barrage-filter{position:fixed;bottom:0;left:0;right:0;z-index:10;background:#fff}
+  .barrage-filter:has(.search-row.show,.type-filter.show){border-top:1px solid var(--border)}
   .barrage-list{padding-bottom:60px}
 }
 </style>
@@ -398,8 +401,14 @@ function toggleTypes() {
 }
 
 function clearSearch() {
-  document.getElementById('keyword').value = '';
-  applyFilter();
+  const kw = document.getElementById('keyword');
+  if (kw.value) {
+    kw.value = '';
+    applyFilter();
+  } else {
+    document.getElementById('searchRow').classList.remove('show');
+    document.querySelector('[title="搜索"]')?.classList.remove('active');
+  }
 }
 
 // ── 下拉框 ──
@@ -427,6 +436,13 @@ document.addEventListener('click', (e) => {
     document.querySelectorAll('.dropdown-menu').forEach(menu => {
       menu.classList.remove('show');
     });
+  }
+  // 点击弹幕列表区域时关闭搜索/类型面板
+  if (e.target.closest('.barrage-list')) {
+    document.getElementById('searchRow').classList.remove('show');
+    document.querySelector('[title="搜索"]')?.classList.remove('active');
+    document.getElementById('typeFilter').classList.remove('show');
+    document.querySelector('[title="类型筛选"]')?.classList.remove('active');
   }
 });
 
