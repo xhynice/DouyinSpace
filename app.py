@@ -53,6 +53,9 @@ RECORDING_DIR = "/data/barrage"
 HF_USER = os.environ.get("HF_USER", "sunset139")
 HF_BUCKET = os.environ.get("HF_BUCKET", "Douyin-storage")
 BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
+# 本地 nginx 代理路径（桶直接挂载，避免 CDN 请求）
+LOCAL_BARRAGE_BASE = "/douyin-storage/barrage"
+LOCAL_COMMENT_BASE = "/douyin/DouyinComment/data"
 
 # ── DouyinComment ──
 COMMENT_DIR = "/data2/DouyinComment/data"
@@ -90,6 +93,14 @@ def _load_emoji():
 # ══════════════════════════════════════
 
 def buckets_url(local_path):
+    """生成资源 URL：优先本地 nginx 代理，回退 CDN"""
+    # 弹幕资源 → /data（Douyin-storage 桶）
+    if local_path.startswith("/data/"):
+        return "/douyin-storage/" + local_path[6:]  # 去掉 /data/ 前缀
+    # 评论资源 → /data2（douyin 桶）
+    if local_path.startswith("/data2/"):
+        return "/douyin/" + local_path[7:]  # 去掉 /data2/ 前缀
+    # 其他 → CDN（兜底）
     rel = local_path.replace("/data/", "", 1)
     return BUCKETS_BASE + "/" + quote(rel, safe="/") + "?download=true"
 
@@ -285,8 +296,8 @@ def _stat_barrage_db(path, name):
         "size_mb": round(s.st_size / 1048576, 2),
         "modified": datetime.fromtimestamp(s.st_mtime).strftime("%Y-%m-%d %H:%M"),
         "msg_count": msg_count,
-        "avatar_url": f"{BUCKETS_BASE}/barrage/{quote(anchor, safe='/')}/avatar.jpg?download=true",
-        "cover_url": f"{BUCKETS_BASE}/barrage/{quote(anchor, safe='/')}/cover.jpg?download=true",
+        "avatar_url": f"{LOCAL_BARRAGE_BASE}/{quote(anchor, safe='/')}/avatar.jpg",
+        "cover_url": f"{LOCAL_BARRAGE_BASE}/{quote(anchor, safe='/')}/cover.jpg",
     }
 
 def get_barrage_dbs():
@@ -427,7 +438,7 @@ def _get_comment_users_from_db():
                 users.append({
                     "sec_uid": u.get("sec_uid", ""),
                     "nickname": u.get("nickname", "未知"),
-                    "avatar_url": f"https://huggingface.co/buckets/sunset139/douyin/resolve/DouyinComment/data/{u.get('sec_uid', '')}/avatar.jpg",
+                    "avatar_url": f"{LOCAL_COMMENT_BASE}/{u.get('sec_uid', '')}/avatar.jpg",
                     "videos": 0, "comments": 0, "replies": 0,
                     "media_downloaded": 0, "last_update": None,
                 })
