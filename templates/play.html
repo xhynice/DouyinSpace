@@ -41,7 +41,7 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 .barrage-item .user:hover{text-decoration:underline}
 .barrage-item .user-info{display:flex;align-items:center;gap:3px;flex-shrink:0;line-height:1.4}
 .barrage-item .grade{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600}
-.barrage-item .content{font-size:12px;word-break:break-word;line-height:1.4;overflow:hidden}
+.barrage-item .content{font-size:12px;word-break:break-word;line-height:1.4;min-width:0}
 .barrage-item .fans{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600;min-width:20px;text-align:center}
 
 /* 抖音财富等级颜色 Lv1-75 */
@@ -284,6 +284,11 @@ async function init() {
   }
   
   await loadBarrage(0);
+  // 列表没填满视口且还有更多 → 自动继续加载（防止不足2000条时滚到底部）
+  const list = document.getElementById('barrageList');
+  while (hasMore && list.scrollHeight <= list.clientHeight) {
+    await loadBarrage(lastCursor);
+  }
   // 初始加载完成后，延迟解锁滚动事件，确保渲染和滚动位置稳定
   setTimeout(() => { initialLoading = false; }, 500);
 }
@@ -567,9 +572,10 @@ function renderList() {
     </div>`;
   }).join('');
   
-  // 保存滚动位置
+  // 保存滚动位置（列表未溢出时 wasAtBottom 应为 false）
   const wasEmpty = list.scrollHeight === 0;
-  const wasAtBottom = !wasEmpty && (list.scrollHeight - list.scrollTop - list.clientHeight < 100);
+  const overflow = list.scrollHeight > list.clientHeight;
+  const wasAtBottom = overflow && (list.scrollHeight - list.scrollTop - list.clientHeight < 100);
   
   list.innerHTML = html;
   
