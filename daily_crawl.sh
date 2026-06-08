@@ -203,7 +203,7 @@ fi
 
 log "[5/6] 构建评论前端数据..."
 cd /app/DouyinComment
-if python3 scripts/build_comment.py --sqlite --cdn "https://huggingface.co/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
+if python3 scripts/build_comment.py --sqlite --cdn "https://openw.cc.cd/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
     log "[5/6] 评论前端构建完成"
 else
     log "[5/6] 评论前端构建失败"
