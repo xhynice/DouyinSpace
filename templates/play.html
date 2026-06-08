@@ -242,6 +242,7 @@ let allBarrage = [];
 let visibleBarrage = [];
 let activeIdx = -1;
 let userScrolling = false;
+let programmaticScroll = false;  // 程序触发的滚动不设 userScrolling
 let scrollTimer = null;
 let refTimer = null;
 let filterTimer = null;
@@ -313,6 +314,7 @@ function bindEvents() {
   
   list.addEventListener('scroll', () => {
     if (loading) return;
+    if (programmaticScroll) { programmaticScroll = false; return; }
     userScrolling = true;
     clearTimeout(scrollTimer);
     scrollTimer = setTimeout(() => { userScrolling = false; }, 300);
@@ -575,15 +577,21 @@ function renderList() {
       // 初始加载：有 active 弹幕则跟随，否则滚到顶部
       const activeEl = list.querySelector('.barrage-item.active');
       if (activeEl) {
+        programmaticScroll = true;
         activeEl.scrollIntoView({ block: 'center' });
       } else {
+        programmaticScroll = true;
         list.scrollTop = 0;
       }
     } else if (wasAtBottom) {
+      programmaticScroll = true;
       list.scrollTop = list.scrollHeight;
     } else {
       const activeEl = list.querySelector('.barrage-item.active');
-      if (activeEl) activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (activeEl) {
+        programmaticScroll = true;
+        activeEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
     }
   }
 }
@@ -597,6 +605,7 @@ function highlightItem() {
   if (item) {
     item.classList.add('active');
     if (!userScrolling && document.getElementById('autoScroll').checked) {
+      programmaticScroll = true;
       item.scrollIntoView({ behavior: 'smooth', block: 'center' });
     }
   }
