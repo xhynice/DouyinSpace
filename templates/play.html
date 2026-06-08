@@ -35,12 +35,12 @@ body{background:#f0f0f0;font-family:Inter,-apple-system,sans-serif;color:#1d2129
 
 /* 弹幕列表 */
 .barrage-list{flex:1;overflow-y:auto;padding:4px 0}
-.barrage-item{padding:5px 12px;cursor:pointer;line-height:1.5;display:flex;align-items:baseline;gap:5px;flex-wrap:wrap}
+.barrage-item{padding:5px 12px;cursor:pointer;line-height:1.5}
 .barrage-item:hover{background:#f5f7fa}
 .barrage-item.active{background:#e8f3ff}
 .barrage-item .user{color:#ff6a00;font-weight:600;font-size:12px;cursor:pointer;white-space:nowrap;line-height:1.4}
 .barrage-item .user:hover{text-decoration:underline}
-.barrage-item .user-info{display:flex;align-items:baseline;gap:3px;flex-shrink:0;line-height:1.4}
+.barrage-item .user-info{display:inline-flex;align-items:baseline;gap:3px;line-height:1.4;vertical-align:baseline}
 .barrage-item .grade{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600}
 .barrage-item .content{font-size:12px;word-break:break-word;line-height:1.4;overflow:hidden}
 .barrage-item .fans{font-size:10px;padding:1px 4px;border-radius:3px;font-weight:600;min-width:20px;text-align:center}
