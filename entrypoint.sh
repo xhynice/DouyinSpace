@@ -50,12 +50,13 @@ else
     echo "[3/6] 配置拉取失败，使用现有配置"
 fi
 
-# 3. 每天凌晨 3 点运行评论采集
+# 3. 每天凌晨 5:30 运行评论采集（cron 环境极简，需显式传入 PATH 和 HF_TOKEN）
 echo "[4/6] 配置定时任务..."
-cat <<'CRONTAB' | crontab -
+cat <<EOF | crontab -
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
+HF_TOKEN=$HF_TOKEN
 30 5 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1
-CRONTAB
+EOF
 echo "[4/6] 定时任务已配置"
 
 # 4. 注入 Cookie
