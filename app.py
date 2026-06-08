@@ -53,8 +53,9 @@ RECORDING_DIR = "/data/barrage"
 HF_USER = os.environ.get("HF_USER", "sunset139")
 HF_BUCKET = os.environ.get("HF_BUCKET", "Douyin-storage")
 BUCKETS_BASE = f"https://huggingface.co/buckets/{HF_USER}/{HF_BUCKET}/resolve"
-CDN_BARRAGE = BUCKETS_BASE  # Douyin-storage 桶 CDN
-CDN_COMMENT = f"https://huggingface.co/buckets/{HF_USER}/douyin/resolve"  # douyin 桶 CDN
+CDN_BASE = f"https://openw.cc.cd/buckets/{HF_USER}"
+CDN_BARRAGE = f"{CDN_BASE}/{HF_BUCKET}/resolve"  # Cloudflare 代理 Douyin-storage 桶
+CDN_COMMENT = f"{CDN_BASE}/douyin/resolve"  # Cloudflare 代理 douyin 桶
 _VIDEO_EXT = {".ts", ".mp4", ".mkv", ".flv"}
 LOCAL_COMMENT_BASE = "/douyin/DouyinComment/data"
 
