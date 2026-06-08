@@ -68,10 +68,13 @@ else
     echo "[5/6] 未设置 DOUYIN_COOKIE，跳过注入"
 fi
 
-# 检查 DUFS_PASSWORD
+# 检查必要 Secret
 if [ -z "$DUFS_PASSWORD" ]; then
     echo "[错误] 未设置 DUFS_PASSWORD Secret，无法启动文件管理器"
     exit 1
+fi
+if [ -z "$HF_TOKEN" ]; then
+    echo "[警告] 未设置 HF_TOKEN Secret，每日采集上传将失败"
 fi
 
 # 6. 启动服务
