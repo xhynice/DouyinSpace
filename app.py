@@ -22,7 +22,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 from urllib.parse import quote
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeout
 
 import yaml
 from flask import Flask, jsonify, request, render_template, Response, send_from_directory, g
@@ -94,6 +94,23 @@ def _check_rate_limit(ip):
 
 # ── 弹幕进程 API ──
 BARRAGE_API = os.environ.get("BARRAGE_API", "http://127.0.0.1:8088")
+
+# ── FUSE 超时保护 ──
+# /data 是 FUSE 挂载，文件操作可能卡住。用线程池 + 超时保护。
+_FUSE_TIMEOUT = 8  # 秒
+_fuse_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='fuse')
+
+
+def _fuse_safe(fn, fallback=None, timeout=_FUSE_TIMEOUT):
+    """在线程池中执行 FUSE 操作，超时返回 fallback。"""
+    try:
+        return _fuse_pool.submit(fn).result(timeout=timeout)
+    except FuturesTimeout:
+        logger.warning(f"[FUSE] 操作超时 ({timeout}s): {fn.__name__ if hasattr(fn, '__name__') else 'lambda'}")
+        return fallback
+    except Exception as e:
+        logger.warning(f"[FUSE] 操作异常: {e}")
+        return fallback
 
 _TS_RE = re.compile(r"(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})")
 _TS_RE_NEW = re.compile(r"(\d{8})_(\d{4})_\d{3}")
@@ -712,14 +729,14 @@ def _log_request(response):
 
 @app.route("/")
 def index():
-    api_status = query_api("/api/status")
-    api_rooms = query_api("/api/rooms")
-    recordings = get_recordings()
-    barrage_dbs = get_barrage_dbs()
+    api_status = _fuse_safe(lambda: query_api("/api/status"))
+    api_rooms = _fuse_safe(lambda: query_api("/api/rooms"))
+    recordings = _fuse_safe(get_recordings, fallback=[])
+    barrage_dbs = _fuse_safe(get_barrage_dbs, fallback=[])
     total_size = sum(f["size_mb"] for f in recordings)
     total_barrage_count = sum(db.get("msg_count", 0) for db in barrage_dbs)
-    comment_stats = get_comment_stats()
-    comment_users = get_comment_users()
+    comment_stats = _fuse_safe(get_comment_stats, fallback={"users": 0, "videos": 0, "comments": 0, "replies": 0})
+    comment_users = _fuse_safe(get_comment_users, fallback=[])
     return render_template("index.html",
         api_status=api_status,
         api_rooms=api_rooms or [],
@@ -729,8 +746,8 @@ def index():
         total_barrage_count=total_barrage_count,
         comment_stats=comment_stats,
         comment_users=comment_users,
-        logs=read_log(os.path.join(LOG_DIR, "barrage_stdout.log"), 150),
-        cron_logs=get_latest_daily_crawl_log(),
+        logs=_fuse_safe(lambda: read_log(os.path.join(LOG_DIR, "barrage_stdout.log"), 150), fallback=[]),
+        cron_logs=_fuse_safe(get_latest_daily_crawl_log, fallback=[]),
     )
 
 
@@ -742,13 +759,13 @@ def play_page(filepath):
         return "Forbidden", 403
     filename = os.path.basename(filepath)
     video_start = extract_start_time(filepath) or 0
-    recordings = get_recordings()
-    db_path, anchor = find_db_for_video(filepath)
-    anchor_files = get_anchor_files(filepath, recordings)
+    recordings = _fuse_safe(get_recordings, fallback=[])
+    db_path, anchor = _fuse_safe(lambda: find_db_for_video(filepath, recordings), fallback=(None, None))
+    anchor_files = _fuse_safe(lambda: get_anchor_files(filepath, recordings), fallback=[])
     # Use file mtime as video_end
     try:
-        video_end = int(os.stat(filepath).st_mtime)
-    except OSError:
+        video_end = int(_fuse_safe(lambda: os.stat(filepath).st_mtime, fallback=0))
+    except (OSError, TypeError):
         video_end = 0
     return render_template("play.html",
         filename=filename,
@@ -777,9 +794,9 @@ def api_barrage():
     types_str = request.args.get("types", "")
     types = set(types_str.split(",")) if types_str else None
     user = request.args.get("user", "").strip() or None
-    if not db or not os.path.exists(db):
+    if not db or not _fuse_safe(lambda: os.path.exists(db), fallback=False):
         return jsonify({"error": "not found", "barrage": []})
-    results = query_barrage(db, t_from, t_to, limit=limit, cursor=cursor, sort=sort, types=types, user=user)
+    results = _fuse_safe(lambda: query_barrage(db, t_from, t_to, limit=limit, cursor=cursor, sort=sort, types=types, user=user), fallback=[])
     for r in results:
         r["offset"] = max(0, r["time"] - t_from) if t_from else 0
     next_cursor = results[-1]["time"] if results else cursor
@@ -790,14 +807,15 @@ def api_barrage():
 def api_recordings():
     if not _check_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "rate limited"}), 429
-    return jsonify({"files": get_recordings()})
+    return jsonify({"files": _fuse_safe(get_recordings, fallback=[])})
 
 
 @app.route("/api/barrage-dbs")
 def api_barrage_dbs():
     if not _check_rate_limit(request.remote_addr or "unknown"):
         return jsonify({"error": "rate limited"}), 429
-    dbs = [{k: v for k, v in d.items() if not k.startswith("_")} for d in get_barrage_dbs()]
+    dbs = _fuse_safe(get_barrage_dbs, fallback=[])
+    dbs = [{k: v for k, v in d.items() if not k.startswith("_")} for d in dbs]
     return jsonify({"dbs": dbs})
 
 

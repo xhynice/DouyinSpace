@@ -50,6 +50,12 @@ else
     echo "[3/6] 拉取失败，使用现有代码"
 fi
 
+# 3.5 确保 gunicorn 已安装（web 面板多线程运行）
+if ! command -v gunicorn &>/dev/null; then
+    echo "  → 安装 gunicorn..."
+    pip install gunicorn -q 2>&1 || echo "  → gunicorn 安装失败，将使用 Flask 内置 server"
+fi
+
 # 4. 配置定时任务（cron 环境极简，需显式传入 PATH 和 HF_TOKEN）
 echo "[4/6] 配置定时任务..."
 cat <<EOF | crontab -
