@@ -282,7 +282,7 @@ async function init() {
   await loadEmoji();
   bindEvents();
   
-  if (!HAS_BARRAGE || !VIDEO_START) {
+  if (!HAS_BARRAGE || VIDEO_START == null) {
     showEmpty('无弹幕');
     return;
   }

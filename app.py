@@ -674,7 +674,7 @@ def get_anchor_files(video_path, recordings=None):
 
 def query_barrage(db_path, t_from=None, t_to=None, limit=0, cursor=0, sort="asc", types=None, user=None):
     # 安全检查：必须有时间范围，防止全表扫描
-    if not t_from and not t_to and not cursor:
+    if t_from is None and t_to is None and not cursor:
         logger.warning(f"[弹幕] 查询缺少时间范围，拒绝全表扫描: {db_path}")
         return []
     cache_key = (db_path, t_from, t_to, limit, cursor, sort, tuple(sorted(types)) if types else None, user)
