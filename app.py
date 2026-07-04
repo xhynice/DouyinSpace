@@ -845,7 +845,7 @@ def play_page(filepath):
     recordings = _fuse_safe(get_recordings, fallback=[])
     if not recordings:
         logger.warning(f"[播放] 录制列表为空，FUSE 可能卡死: {filepath}")
-    db_path, anchor = _fuse_safe(lambda: find_db_for_video(filepath, recordings), fallback=(None, None))
+    db_path, anchor = _fuse_safe(lambda: find_db_for_video(filepath), fallback=(None, None))
     if not db_path:
         logger.warning(f"[播放] 未找到弹幕 DB（可能是新录制）: {filepath}")
     anchor_files = _fuse_safe(lambda: get_anchor_files(filepath, recordings), fallback=[])
