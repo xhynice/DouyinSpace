@@ -36,7 +36,6 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s [%(levelname)s] %(name)s: %(message)s',
     handlers=[
-        logging.StreamHandler(),
         logging.FileHandler(LOG_FILE, encoding="utf-8"),
     ]
 )
@@ -69,6 +68,22 @@ BARRAGE_CACHE_TTL = 1200  # mtime不变时20分钟有效
 _barrage_cache = {}  # key -> {"data": [...], "ts": float, "mtime": float}
 BARRAGE_CACHE_MAX = 50  # 最多缓存50个查询
 
+# ── 预生成弹幕缓存（每天采集后生成，首页直接读 JSON 不扫 FUSE）──
+BARRAGE_CACHE_JSON = "/data/barrage_cache.json"
+
+def _load_barrage_cache():
+    """从预生成的 barrage_cache.json 加载录制+DB统计。
+    缓存超过24小时则忽略（太旧了就扫 FUSE 刷新）。
+    """
+    try:
+        mtime = os.path.getmtime(BARRAGE_CACHE_JSON)
+        if time.time() - mtime > 86400:
+            return None
+        with open(BARRAGE_CACHE_JSON, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return None
+
 # ── 请求限流 ──
 _rate_limits = {}  # ip -> deque of timestamps
 RATE_LIMIT = 30  # 每分钟最多30次请求
@@ -98,7 +113,7 @@ BARRAGE_API = os.environ.get("BARRAGE_API", "http://127.0.0.1:8088")
 # ── FUSE 超时保护 ──
 # /data 是 FUSE 挂载，文件操作可能卡住。用线程池 + 超时保护。
 _FUSE_TIMEOUT = 8  # 秒
-_fuse_pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='fuse')
+_fuse_pool = ThreadPoolExecutor(max_workers=4, thread_name_prefix='fuse')
 
 
 def _fuse_safe(fn, fallback=None, timeout=_FUSE_TIMEOUT):
@@ -190,13 +205,21 @@ def extract_start_time(path):
 
 def _scan_files(base_dir, valid_ext, cache_key, cache_ttl, stat_fn):
     """通用文件扫描+缓存（扫描两级子目录）。"""
+    # 1. 持久化文件缓存优先（避免扫 FUSE）
+    file_cache = _load_file_cache(cache_key)
+    if file_cache is not None:
+        _file_caches[cache_key] = {"data": file_cache, "ts": time.time()}
+        return file_cache
+
+    # 2. 内存缓存
     cache = _file_caches[cache_key]
     now = time.time()
     if now - cache["ts"] < cache_ttl and cache["data"]:
         return cache["data"]
+
+    # 3. 扫 FUSE
     files = []
     try:
-        # 扫描两级子目录：data/barrage/<主播>/<时间戳>/文件
         for entry in os.scandir(base_dir):
             if entry.is_dir():
                 for sub in os.scandir(entry.path):
@@ -217,10 +240,37 @@ def _scan_files(base_dir, valid_ext, cache_key, cache_ttl, stat_fn):
     files.sort(key=lambda x: x.get("name", ""), reverse=True)
     if files:
         _file_caches[cache_key] = {"data": files, "ts": now}
+        _save_file_cache(cache_key, files)  # 持久化缓存
     return files
 
 _FILE_EXT = {'.ts', '.mp4', '.mkv', '.flv'}
 _file_caches = {"recordings": {"data": [], "ts": 0}, "barrage": {"data": [], "ts": 0}}
+
+# ── 持久化文件缓存（避免每次首页访问都扫 FUSE）──
+_FILE_CACHE_DIR = "/data/cache"
+_FILE_CACHE_TTL = 300  # 5分钟文件缓存有效期
+
+def _load_file_cache(cache_key):
+    """从 JSON 文件加载缓存，过期或失败返回 None。"""
+    path = os.path.join(_FILE_CACHE_DIR, f"{cache_key}.json")
+    try:
+        mtime = os.path.getmtime(path)
+        if time.time() - mtime < _FILE_CACHE_TTL:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+def _save_file_cache(cache_key, data):
+    """扫描成功后写入持久化缓存。"""
+    try:
+        os.makedirs(_FILE_CACHE_DIR, exist_ok=True)
+        path = os.path.join(_FILE_CACHE_DIR, f"{cache_key}.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception as e:
+        logger.warning(f"[文件缓存] 写入失败 {cache_key}: {e}")
 
 def _stat_recording(path, name):
     s = os.stat(path)
@@ -232,6 +282,10 @@ def _stat_recording(path, name):
     }
 
 def get_recordings():
+    # 优先读预生成缓存（每天采集后自动生成，零 FUSE 扫描）
+    cache = _load_barrage_cache()
+    if cache and cache.get("recordings"):
+        return cache["recordings"]
     return _scan_files(RECORDING_DIR, _FILE_EXT, "recordings", 60, _stat_recording)
 
 
@@ -371,6 +425,16 @@ def _stat_barrage_db(path, name):
     }
 
 def get_barrage_dbs():
+    # 优先读预生成缓存（每天采集后自动生成，零 FUSE 扫描 + 零 DB COUNT）
+    cache = _load_barrage_cache()
+    if cache and cache.get("barrage_dbs"):
+        dbs = cache["barrage_dbs"]
+        # 旧缓存可能没有 avatar_url/cover_url，补上
+        for db in dbs:
+            anchor = db["anchor"]
+            db.setdefault("avatar_url", f"{CDN_BARRAGE}/barrage/{quote(anchor, safe='/')}/avatar.jpg?download=true")
+            db.setdefault("cover_url", f"{CDN_BARRAGE}/barrage/{quote(anchor, safe='/')}/cover.jpg?download=true")
+        return dbs
     return _scan_files(BARRAGE_DIR, DB_EXT, "barrage", 300, _stat_barrage_db)
 
 
@@ -410,9 +474,8 @@ def get_comment_stats():
     return _get_comment_stats_from_db()
 
 
-def _get_comment_stats_from_db():
-    """从 SQLite 直接查询评论统计（fallback）。"""
-    now = time.time()
+def _get_comment_mtimes():
+    """收集评论相关文件的 mtime 用于缓存失效检测。"""
     mtimes = []
     try:
         mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
@@ -423,19 +486,30 @@ def _get_comment_stats_from_db():
             mtimes.append(os.path.getmtime(db_file))
         except OSError:
             mtimes.append(0)
-    db_mtime = tuple(mtimes)
-    if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == db_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
-        return _comment_stats_cache["data"]
-    stats = {"users": 0, "videos": 0, "comments": 0, "replies": 0}
+    return tuple(mtimes)
+
+
+def _get_enabled_users():
+    """从 config.yaml 读取启用的评论监控用户列表。"""
     config_path = "/app/DouyinComment/config.yaml"
-    enabled_users = []
     try:
         with open(config_path, "r", encoding="utf-8") as f:
             config = yaml.safe_load(f)
-        enabled_users = [u for u in config.get("users", []) if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#")]
-        stats["users"] = len(enabled_users)
+        return [u for u in config.get("users", []) if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#")]
     except Exception as e:
-        logger.warning(f"[评论统计] 读取配置失败: {e}")
+        logger.warning(f"[评论] 读取配置失败: {e}")
+        return []
+
+
+def _get_comment_stats_from_db():
+    """从 SQLite 直接查询评论统计（fallback）。"""
+    now = time.time()
+    db_mtime = _get_comment_mtimes()
+    if _comment_stats_cache["data"] and _comment_stats_cache["mtime"] == db_mtime and now - _comment_stats_cache["ts"] < COMMENT_CACHE_TTL:
+        return _comment_stats_cache["data"]
+    stats = {"users": 0, "videos": 0, "comments": 0, "replies": 0}
+    enabled_users = _get_enabled_users()
+    stats["users"] = len(enabled_users)
     for u in enabled_users:
         user_db = os.path.join(COMMENT_DIR, u.get("sec_uid", ""), "sqlite.db")
         if not os.path.exists(user_db):
@@ -447,7 +521,7 @@ def _get_comment_stats_from_db():
             stats["comments"] += conn.execute("SELECT COUNT(*) FROM comments").fetchone()[0]
             stats["replies"] += conn.execute("SELECT COUNT(*) FROM replies").fetchone()[0]
         except Exception as e:
-            logger.warning(f"[评论统计] 查询数据库失败 ({u.get('nickname', '')}): {e}")
+            logger.warning(f"[评论统计] 查询数据库失败 ({u.get('nickname', '')} sec_uid={u.get('sec_uid','')}): {e}")
         finally:
             if conn:
                 conn.close()
@@ -487,35 +561,19 @@ def get_comment_users():
 def _get_comment_users_from_db():
     """从 SQLite 直接查询用户统计（fallback）。"""
     now = time.time()
-    mtimes = []
-    try:
-        mtimes.append(os.path.getmtime("/app/DouyinComment/config.yaml"))
-    except OSError:
-        mtimes.append(0)
-    for db_file in sorted(glob.glob(os.path.join(COMMENT_DIR, "*", "sqlite.db"))):
-        try:
-            mtimes.append(os.path.getmtime(db_file))
-        except OSError:
-            mtimes.append(0)
-    cfg_mtime = tuple(mtimes)
+    cfg_mtime = _get_comment_mtimes()
     if _comment_users_cache["data"] and _comment_users_cache["mtime"] == cfg_mtime and now - _comment_users_cache["ts"] < COMMENT_CACHE_TTL:
         return _comment_users_cache["data"]
     users = []
-    config_path = "/app/DouyinComment/config.yaml"
-    try:
-        with open(config_path, "r", encoding="utf-8") as f:
-            config = yaml.safe_load(f)
-        for u in config.get("users", []):
-            if u.get("enabled", True) and not str(u.get("sec_uid", "")).startswith("#"):
-                users.append({
-                    "sec_uid": u.get("sec_uid", ""),
-                    "nickname": u.get("nickname", "未知"),
-                    "avatar_url": f"{CDN_COMMENT}/DouyinComment/data/{u.get('sec_uid', '')}/avatar.jpg?download=true",
-                    "videos": 0, "comments": 0, "replies": 0,
-                    "media_downloaded": 0, "last_update": None,
-                })
-    except Exception as e:
-        logger.warning(f"[用户统计] 读取配置失败: {e}")
+    for u in _get_enabled_users():
+        avatar_url = f"{CDN_COMMENT}/DouyinComment/data/{u.get('sec_uid', '')}/avatar.jpg?download=true"
+        users.append({
+            "sec_uid": u.get("sec_uid", ""),
+            "nickname": u.get("nickname", "未知"),
+            "avatar_url": avatar_url,
+            "videos": 0, "comments": 0, "replies": 0,
+            "media_downloaded": 0, "last_update": None,
+        })
     for user in users:
         user_db = os.path.join(COMMENT_DIR, user["sec_uid"], "sqlite.db")
         if not os.path.exists(user_db):
@@ -531,7 +589,7 @@ def _get_comment_users_from_db():
             if row and row[0]:
                 user["last_update"] = datetime.fromtimestamp(row[0]).strftime("%Y-%m-%d %H:%M")
         except Exception as e:
-            logger.warning(f"[用户统计] 查询数据库失败 ({user['nickname']}): {e}")
+            logger.warning(f"[用户统计] 查询数据库失败 ({user['nickname']} sec_uid={user.get('sec_uid','')}): {e}")
         finally:
             if conn:
                 conn.close()
@@ -729,25 +787,49 @@ def _log_request(response):
 
 @app.route("/")
 def index():
-    api_status = _fuse_safe(lambda: query_api("/api/status"))
-    api_rooms = _fuse_safe(lambda: query_api("/api/rooms"))
-    recordings = _fuse_safe(get_recordings, fallback=[])
-    barrage_dbs = _fuse_safe(get_barrage_dbs, fallback=[])
-    total_size = sum(f["size_mb"] for f in recordings)
+    # 并行执行所有 FUSE/API 调用（避免顺序8×8s=64s超过 Nginx 60s 超时导致504）
+    pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix='index')
+    futures = {
+        'api_status': pool.submit(lambda: _fuse_safe(lambda: query_api("/api/status"))),
+        'api_rooms': pool.submit(lambda: _fuse_safe(lambda: query_api("/api/rooms"))),
+        'recordings': pool.submit(lambda: _fuse_safe(get_recordings, fallback=[])),
+        'barrage_dbs': pool.submit(lambda: _fuse_safe(get_barrage_dbs, fallback=[])),
+        'comment_stats': pool.submit(lambda: _fuse_safe(get_comment_stats, fallback={"users": 0, "videos": 0, "comments": 0, "replies": 0})),
+        'comment_users': pool.submit(lambda: _fuse_safe(get_comment_users, fallback=[])),
+        'logs': pool.submit(lambda: _fuse_safe(lambda: read_log(os.path.join(LOG_DIR, "barrage_stdout.log"), 150), fallback=[])),
+        'cron_logs': pool.submit(lambda: _fuse_safe(get_latest_daily_crawl_log, fallback=[])),
+    }
+    pool.shutdown(wait=False)  # 不阻塞，由各 future 自行管理
+    deadline = time.time() + _FUSE_TIMEOUT * 2 + 2  # 整体 18s 软超时
+    results = {}
+    for name, fut in futures.items():
+        remaining = max(0.5, deadline - time.time())
+        try:
+            results[name] = fut.result(timeout=remaining)
+        except Exception:
+            results[name] = None
+
+    api_status = results.get('api_status')
+    api_rooms = results.get('api_rooms') or []
+    recordings = results.get('recordings') or []
+    total_size = sum(f.get("size_mb", 0) for f in recordings)
+    barrage_dbs = results.get('barrage_dbs') or []
     total_barrage_count = sum(db.get("msg_count", 0) for db in barrage_dbs)
-    comment_stats = _fuse_safe(get_comment_stats, fallback={"users": 0, "videos": 0, "comments": 0, "replies": 0})
-    comment_users = _fuse_safe(get_comment_users, fallback=[])
+    comment_stats = results.get('comment_stats') or {"users": 0, "videos": 0, "comments": 0, "replies": 0}
+    comment_users = results.get('comment_users') or []
+    logs = results.get('logs') or []
+    cron_logs = results.get('cron_logs') or []
     return render_template("index.html",
         api_status=api_status,
-        api_rooms=api_rooms or [],
+        api_rooms=api_rooms,
         recordings=recordings[:50],
         barrage_dbs=barrage_dbs,
         total_size=total_size,
         total_barrage_count=total_barrage_count,
         comment_stats=comment_stats,
         comment_users=comment_users,
-        logs=_fuse_safe(lambda: read_log(os.path.join(LOG_DIR, "barrage_stdout.log"), 150), fallback=[]),
-        cron_logs=_fuse_safe(get_latest_daily_crawl_log, fallback=[]),
+        logs=logs,
+        cron_logs=cron_logs,
     )
 
 
@@ -756,11 +838,16 @@ def play_page(filepath):
     if not filepath.startswith("/"):
         filepath = "/" + filepath
     if not filepath.startswith("/data/"):
+        logger.warning(f"[播放] 拒绝越权路径: {filepath}")
         return "Forbidden", 403
     filename = os.path.basename(filepath)
     video_start = extract_start_time(filepath) or 0
     recordings = _fuse_safe(get_recordings, fallback=[])
+    if not recordings:
+        logger.warning(f"[播放] 录制列表为空，FUSE 可能卡死: {filepath}")
     db_path, anchor = _fuse_safe(lambda: find_db_for_video(filepath, recordings), fallback=(None, None))
+    if not db_path:
+        logger.warning(f"[播放] 未找到弹幕 DB（可能是新录制）: {filepath}")
     anchor_files = _fuse_safe(lambda: get_anchor_files(filepath, recordings), fallback=[])
     # Use file mtime as video_end
     try:
@@ -823,6 +910,7 @@ def api_barrage_dbs():
 def api_proxy(path):
     result = query_api(f"/{path}")
     if result is None:
+        logger.warning(f"[代理] 弹幕 API 不可用: /{path}")
         return jsonify({"error": "barrage API unavailable"}), 502
     return jsonify(result)
 
@@ -840,6 +928,10 @@ BARRAGE_DOCS_DIR = "/app/DouyinBarrage/docs"
 def barrage_page(filepath=""):
     if not filepath:
         filepath = "index.html"
+    full_path = os.path.join(BARRAGE_DOCS_DIR, filepath)
+    if not os.path.isfile(full_path):
+        logger.warning(f"[静态] 弹幕前端文件不存在: {filepath}")
+        return "Not Found", 404
     return send_from_directory(BARRAGE_DOCS_DIR, filepath)
 
 
@@ -851,11 +943,19 @@ COMMENT_DOCS_DIR = "/app/DouyinComment/docs"
 def comment_page(filepath=""):
     if not filepath:
         filepath = "index.html"
+    full_path = os.path.join(COMMENT_DOCS_DIR, filepath)
+    if not os.path.isfile(full_path):
+        logger.warning(f"[静态] 评论前端文件不存在: {filepath}")
+        return "Not Found", 404
     return send_from_directory(COMMENT_DOCS_DIR, filepath)
 
 
 @app.route("/favicon.ico")
 def favicon():
+    p = os.path.join(app.static_folder or "static", "favicon.ico")
+    if not os.path.isfile(p):
+        logger.warning("[静态] favicon.ico 不存在")
+        return "", 404
     return send_from_directory("static", "favicon.ico", mimetype="image/x-icon")
 
 

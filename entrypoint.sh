@@ -33,6 +33,7 @@ if git clone --depth 1 https://github.com/xhynice/DouyinSpace.git /tmp/space 2>/
     cp /tmp/space/DouyinComment/config.yaml /app/DouyinComment/config.yaml 2>/dev/null || true
     cp /tmp/space/app.py /app/app.py 2>/dev/null || true
     cp /tmp/space/generate_comment_cache.py /app/generate_comment_cache.py 2>/dev/null || true
+    cp /tmp/space/generate_barrage_cache.py /app/generate_barrage_cache.py 2>/dev/null || true
     cp -r /tmp/space/templates /app/ 2>/dev/null || true
     cp /tmp/space/daily_crawl.sh /app/daily_crawl.sh 2>/dev/null || true
     cp -r /tmp/space/static /app/ 2>/dev/null || true
@@ -61,7 +62,7 @@ echo "[4/6] 配置定时任务..."
 cat <<EOF | crontab -
 PATH=/usr/local/bin:/usr/bin:/bin:/usr/local/sbin:/usr/sbin:/sbin
 HF_TOKEN=$HF_TOKEN
-0 6 * * * /bin/bash /app/daily_crawl.sh >> /data/logs/cron.log 2>&1
+0 6 * * * /bin/bash /app/daily_crawl.sh &>/dev/null
 EOF
 echo "[4/6] 定时任务已配置"
 
