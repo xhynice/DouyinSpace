@@ -193,44 +193,44 @@ log "DouyinComment 每日采集结束"
 log "=========================================="
 
 # ---------------------------------------------------------------------------
-# 5. 重新构建前端数据
+# 4. CSV → SQLite 转换(播放页弹幕查询用) - 放在前端构建之前，避免被卡住
 # ---------------------------------------------------------------------------
-log "[4/8] 构建弹幕前端数据..."
-cd /app/DouyinBarrage
-if python3 docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
-    log "[4/8] 弹幕前端构建完成"
-else
-    log "[4/8] 弹幕前端构建失败"
-fi
-
-log "[5/8] 构建评论前端数据..."
-cd /app/DouyinComment
-if python3 scripts/build_comment.py --sqlite --cdn "https://openw.cc.cd/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
-    log "[5/8] 评论前端构建完成"
-else
-    log "[5/8] 评论前端构建失败"
-fi
-
-# ---------------------------------------------------------------------------
-# 6. CSV → SQLite 转换(播放页弹幕查询用)
-# ---------------------------------------------------------------------------
-log "[6/8] CSV → SQLite 转换..."
+log "[4/8] CSV → SQLite 转换..."
 cd /app
 if python3 /app/csv_to_sqlite.py --data-dir /data/barrage >> "$LOG_FILE" 2>&1; then
-    log "[6/8] CSV → SQLite 转换完成"
+    log "[4/8] CSV → SQLite 转换完成"
 else
-    log "[6/8] CSV → SQLite 转换失败"
+    log "[4/8] CSV → SQLite 转换失败"
 fi
 
 # ---------------------------------------------------------------------------
-# 7. 预生成弹幕缓存（录制+DB统计），面板首页直接读 JSON 不扫 FUSE
+# 5. 预生成弹幕缓存（录制+DB统计），面板首页直接读 JSON 不扫 FUSE
 # ---------------------------------------------------------------------------
-log "[7/8] 预生成弹幕缓存..."
+log "[5/8] 预生成弹幕缓存..."
 cd /app
 if python3 /app/generate_barrage_cache.py >> "$LOG_FILE" 2>&1; then
-    log "[7/8] 弹幕缓存已生成"
+    log "[5/8] 弹幕缓存已生成"
 else
-    log "[7/8] 弹幕缓存生成失败"
+    log "[5/8] 弹幕缓存生成失败"
+fi
+
+# ---------------------------------------------------------------------------
+# 6. 重新构建前端数据
+# ---------------------------------------------------------------------------
+log "[6/8] 构建弹幕前端数据..."
+cd /app/DouyinBarrage
+if python3 docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
+    log "[6/8] 弹幕前端构建完成"
+else
+    log "[6/8] 弹幕前端构建失败"
+fi
+
+log "[7/8] 构建评论前端数据..."
+cd /app/DouyinComment
+if python3 scripts/build_comment.py --sqlite --cdn "https://openw.cc.cd/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
+    log "[7/8] 评论前端构建完成"
+else
+    log "[7/8] 评论前端构建失败"
 fi
 
 # ---------------------------------------------------------------------------
