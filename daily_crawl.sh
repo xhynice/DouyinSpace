@@ -219,18 +219,28 @@ fi
 # ---------------------------------------------------------------------------
 log "[6/8] 构建弹幕前端数据..."
 cd /app/DouyinBarrage
-if python3 docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
+if timeout 300 python3 docs/build_barrage.py >> "$LOG_FILE" 2>&1; then
     log "[6/8] 弹幕前端构建完成"
 else
-    log "[6/8] 弹幕前端构建失败"
+    ec=$?
+    if [ $ec = 124 ]; then
+        log "[6/8] 弹幕前端构建超时(300s)"
+    else
+        log "[6/8] 弹幕前端构建失败"
+    fi
 fi
 
 log "[7/8] 构建评论前端数据..."
 cd /app/DouyinComment
-if python3 scripts/build_comment.py --sqlite --cdn "https://openw.cc.cd/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
+if timeout 300 python3 scripts/build_comment.py --sqlite --cdn "https://openw.cc.cd/buckets/sunset139/douyin/resolve" >> "$LOG_FILE" 2>&1; then
     log "[7/8] 评论前端构建完成"
 else
-    log "[7/8] 评论前端构建失败"
+    ec=$?
+    if [ $ec = 124 ]; then
+        log "[7/8] 评论前端构建超时(300s)"
+    else
+        log "[7/8] 评论前端构建失败"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
