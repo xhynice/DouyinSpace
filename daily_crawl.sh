@@ -154,10 +154,24 @@ log "=========================================="
 # 1. 采集数据到 DB
 # ---------------------------------------------------------------------------
 log "[1/8] 采集数据..."
-if python3 main.py --all --limit 7 >> "$LOG_FILE" 2>&1; then
-    log "[1/8] 采集完成"
+# 2026-10-27 起不再用 --all 一刀切：作品/评论/回复分开跑，才能只给回复加
+# --skip-existing。语义：新作品三段全采；已采作品的评论每天重拉全量、去重
+# 入库；回复只采一次（已进 replies.csv 的评论直接跳过，不再发请求）。
+# limit 15 = 每人最新 15 条作品（原 7 条）；评论/回复的目标范围同步为最新 15 条。
+if python3 main.py video --limit 15 >> "$LOG_FILE" 2>&1; then
+    log "[1/8] 作品采集完成"
 else
-    log "[1/8] 采集失败,继续执行后续步骤"
+    log "[1/8] 作品采集失败,继续执行后续步骤"
+fi
+if python3 main.py comment --limit 15 >> "$LOG_FILE" 2>&1; then
+    log "[1/8] 评论采集完成"
+else
+    log "[1/8] 评论采集失败,继续执行后续步骤"
+fi
+if python3 main.py reply --limit 15 --skip-existing >> "$LOG_FILE" 2>&1; then
+    log "[1/8] 回复采集完成"
+else
+    log "[1/8] 回复采集失败,继续执行后续步骤"
 fi
 
 # 等待 main.py 进程完全退出（包括 atexit cleanup）
